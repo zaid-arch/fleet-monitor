@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-15T18:14:55.000Z",
+  "updatedAt": "2026-11-15T18:17:26.000Z",
   "messagesLastMinute": 0,
   "bots": [
     {
@@ -34,6 +34,10 @@
         0
       ],
       "activity": [
+        {
+          "at": "2026-11-15T18:17:26.000Z",
+          "text": "Handed a task to MILO"
+        },
         {
           "at": "2026-11-15T18:14:55.000Z",
           "text": "Standing by"
@@ -338,7 +342,13 @@
       "activity": []
     }
   ],
-  "handoffs": [],
+  "handoffs": [
+    {
+      "from": "donna",
+      "to": "milo",
+      "at": "2026-11-15T18:17:26.000Z"
+    }
+  ],
   "usage": {
     "weekUsedPct": 29.1,
     "snapshotAt": "2026-11-15T18:05:17.000Z",
