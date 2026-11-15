@@ -796,7 +796,7 @@
     }
   </style>
 </head>
-<body class="is-demo">
+<body class="is-live">
   <svg class="sprite" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" focusable="false">
     <defs>
       <!-- Zaid: owner, short dark hair, beard, navy suit, gold tie -->
@@ -1171,7 +1171,7 @@
       "use strict";
 
       // Set to true and place status.json beside this file to replace the simulator.
-      const USE_STATUS_JSON = false;
+      const USE_STATUS_JSON = true;
 
       // Weekly usage snapshot (real numbers from the Grok Bot usage report, Nov 15, 2026 3:38 AM Dubai).
       // These are not simulated. Update these values to refresh the panel.
@@ -1548,7 +1548,7 @@
 
       async function loadFleetStatus() {
         if (USE_STATUS_JSON) {
-          const res = await fetch("status.json", { cache: "no-store" });
+          const res = await fetch("status.json?t=" + Date.now(), { cache: "no-store" });
           if (!res.ok) throw new Error("status.json " + res.status);
           return res.json();
         }
@@ -2031,7 +2031,7 @@
       updateClock();
       setInterval(updateClock, 1000);
       refresh();
-      setInterval(refresh, 2200);
+      setInterval(refresh, 3000);
       requestAnimationFrame(loop);
 
       const preset = new URLSearchParams(location.search).get("panel");
