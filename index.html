@@ -244,6 +244,23 @@
       overflow: auto;
     }
 
+    .hero {
+      position: relative;
+      margin: 22px 300px 0 22px;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      height: clamp(220px, 34vw, 440px);
+      background: #1a140f url("office.jpg") center / cover no-repeat;
+    }
+    .hero::after {
+      content: "";
+      position: absolute; inset: 0;
+      background: linear-gradient(to bottom, rgba(0,0,0,0) 65%, rgba(10,12,18,0.55) 100%);
+    }
+    @media (max-width: 900px) { .hero { margin: 14px 14px 0; } }
+
     .floor-wrap {
       position: relative;
       min-height: 100%;
@@ -1134,6 +1151,7 @@
     </header>
 
     <main>
+      <div class="hero" role="img" aria-label="Warm evening office with the bot team at their desks"></div>
       <div class="floor-wrap" id="floor-wrap">
         <div id="floor"></div>
         <svg id="handoff-layer" aria-hidden="true"></svg>
