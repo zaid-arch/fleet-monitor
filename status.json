@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-15T18:51:57.000Z",
+  "updatedAt": "2026-11-15T18:52:08.000Z",
   "messagesLastMinute": 0,
   "bots": [
     {
@@ -337,15 +337,15 @@
       "id": "research",
       "name": "Research",
       "role": "Dashboard research",
-      "status": "idle",
-      "currentTask": "Standing by",
+      "status": "busy",
+      "currentTask": "Research task",
       "avatar": "",
       "tasksCompletedToday": 0,
       "openTasks": 0,
       "errorCount": 0,
       "alerts": [],
       "uptimeSince": "2026-11-15T16:20:00.000Z",
-      "stateSince": "2026-11-15T16:20:00.000Z",
+      "stateSince": "2026-11-15T18:52:08.000Z",
       "msgsToday": {
         "sent": 0,
         "received": 0
@@ -364,7 +364,12 @@
         0,
         0
       ],
-      "activity": []
+      "activity": [
+        {
+          "at": "2026-11-15T18:52:08.000Z",
+          "text": "Updated current task"
+        }
+      ]
     }
   ],
   "handoffs": [],
