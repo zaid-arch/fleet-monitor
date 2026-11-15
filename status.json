@@ -333,5 +333,36 @@
       "activity": []
     }
   ],
-  "handoffs": []
+  "handoffs": [],
+  "usage": {
+    "weekUsedPct": 24.9,
+    "snapshotAt": "2026-11-15T16:46:00.000Z",
+    "resetsAt": "2026-11-15T19:52:00.000Z",
+    "shares": [
+      {
+        "id": "donna",
+        "pct": 81
+      },
+      {
+        "id": "alex",
+        "pct": 12
+      },
+      {
+        "id": "mailman",
+        "pct": 5
+      },
+      {
+        "id": "legal",
+        "pct": 2
+      },
+      {
+        "id": "morgan",
+        "pct": "<1"
+      },
+      {
+        "id": "other",
+        "pct": "<1"
+      }
+    ]
+  }
 }

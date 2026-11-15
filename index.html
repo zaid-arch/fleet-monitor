@@ -9,9 +9,14 @@
     Fleet Monitor — office floor
     ----------------------------
     Single-file dashboard in live mode: it reads status.json next to
-    this page every 3 seconds. office.jpg is the page background.
+    this page every 3 seconds. office.jpg is the office scene; each
+    bot's live status chip sits over its monitor.
 
-    Weekly usage figures come from the USAGE snapshot in the script.
+    Weekly usage is read from status.json too, as a top-level object:
+    "usage": { "weekUsedPct": 24.9, "snapshotAt": ISO, "resetsAt": ISO,
+               "shares": [ { "id": "donna", "pct": 81 }, ... ] }
+    pct may be a number or a string such as "<1". The panel hides when
+    usage is missing.
 
     Expected status.json shape:
 
@@ -61,7 +66,6 @@
     activity timestamps should be ISO-8601.
     Bot ids used in this file: donna, milo, colin, alex, audrey,
     security, legal, mailman, morgan, research.
-    Zaid is the owner seat and is not part of the bots array.
   -->
   <style>
     :root {
@@ -80,18 +84,12 @@
       --mono: "SF Mono", "Cascadia Mono", "Consolas", ui-monospace, Menlo, monospace;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html { min-height: 100%; background: #1a110b; }
+    html {
+      min-height: 100%;
+      background: radial-gradient(ellipse 110% 80% at 50% 0%, #3a2414 0%, #22150c 55%, #170e08 100%) fixed;
+      background-color: #170e08;
+    }
     body { min-height: 100vh; color: var(--text); font-family: var(--sans); color-scheme: dark; background: transparent; }
-    body::before {
-      content: ""; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -2;
-      background: url("office.jpg") center / cover no-repeat;
-      filter: blur(6px) saturate(1.1);
-      transform: scale(1.06);
-    }
-    body::after {
-      content: ""; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1;
-      background: rgba(22, 12, 6, 0.66);
-    }
     .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
     .glass {
       background: var(--panel);
@@ -104,52 +102,75 @@
     /* Top bar */
     header {
       position: sticky; top: 0; z-index: 5;
-      display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px;
-      padding: 10px 20px;
-      background: rgba(28, 17, 10, 0.78);
+      display: flex; align-items: center; flex-wrap: wrap; gap: 10px 24px;
+      padding: 14px 28px;
+      background: rgba(28, 17, 10, 0.82);
       border-bottom: 1px solid var(--brass);
       backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     }
     .brand { display: flex; align-items: center; gap: 10px; }
-    .brand strong { font-size: 14px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
+    .brand strong { font-size: 16px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
     .live {
       display: none; align-items: center; gap: 6px;
       padding: 2px 8px; border-radius: 999px;
       border: 1px solid rgba(95, 214, 143, 0.45); background: rgba(95, 214, 143, 0.12);
-      color: var(--idle); font: 600 10px var(--mono); letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--idle); font: 700 12px var(--sans); letter-spacing: 0.1em; text-transform: uppercase;
     }
     body.is-live .live { display: inline-flex; }
     .live i { width: 7px; height: 7px; border-radius: 50%; background: var(--idle); box-shadow: 0 0 8px var(--idle); animation: pulse 2s infinite; }
     @keyframes pulse { 50% { opacity: 0.35; } }
-    .counts { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-left: auto; font-size: 12px; color: var(--muted); }
+    .counts { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-left: auto; font-size: 15px; color: var(--muted); }
     .counts span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-    .counts b { color: var(--text); font: 600 13px var(--mono); }
+    .counts b { color: var(--text); font-weight: 700; font-size: 17px; }
     .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
     .dot.idle { background: var(--idle); } .dot.busy { background: var(--busy); } .dot.error { background: var(--error); }
-    .clock { font: 12px var(--mono); color: var(--muted); white-space: nowrap; }
+    .clock { font-size: 14px; color: var(--muted); white-space: nowrap; }
     .clock small { color: var(--faint); margin-left: 4px; }
 
-    main { padding: 14px 20px 24px; max-width: 1500px; margin: 0 auto; }
+    main { padding: 22px 28px 36px; max-width: 1500px; margin: 0 auto; }
 
     /* Weekly usage: one compact line */
     .usage {
-      display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px;
-      padding: 8px 14px; border-radius: 12px; margin-bottom: 14px; font-size: 12px; color: var(--muted);
+      display: flex; align-items: center; flex-wrap: wrap; gap: 10px 22px;
+      padding: 16px 22px; border-radius: 14px; margin: 0 auto 22px; max-width: 1240px; font-size: 15px; color: var(--muted);
     }
-    .usage .lead { color: var(--text); white-space: nowrap; }
-    .usage .lead b { color: var(--gold); font-family: var(--mono); }
-    .ubar { width: 90px; height: 6px; border-radius: 3px; background: rgba(255, 230, 190, 0.12); overflow: hidden; }
+    .usage .lead { color: var(--text); white-space: nowrap; font-size: 16px; }
+    .usage .lead b { color: var(--gold); font-size: 18px; }
+    .ubar { width: 110px; height: 7px; border-radius: 3px; background: rgba(255, 230, 190, 0.12); overflow: hidden; }
     .ubar i { display: block; height: 100%; background: linear-gradient(90deg, #c9934a, var(--gold)); }
-    .usage ol { display: flex; flex-wrap: wrap; gap: 4px 12px; list-style: none; }
-    .usage li b { color: var(--text); font-family: var(--mono); font-weight: 500; margin-left: 4px; }
-    .usage .meta { margin-left: auto; color: var(--faint); font-size: 11px; }
+    .usage ol { display: flex; flex-wrap: wrap; gap: 6px 18px; list-style: none; }
+    .usage li b { color: var(--text); font-weight: 700; margin-left: 5px; }
+    .usage .meta { margin-left: auto; color: var(--muted); font-size: 14px; }
+
+    /* Office scene: Alex's render, shown once, with live chips over each monitor */
+    .scene {
+      position: relative; width: 100%; max-width: 1240px; margin: 0 auto 22px;
+      aspect-ratio: 1280 / 600; border-radius: 16px; overflow: hidden;
+      border: 1px solid var(--brass); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+      container-type: inline-size;
+    }
+    .scene img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    .desk { position: absolute; transform: translate(-50%, 0); background: none; border: 0; border-radius: 10px; cursor: pointer; }
+    .desk:hover, .desk:focus-visible, .desk.is-open { outline: 2px solid var(--brass-strong); outline-offset: -2px; background: rgba(226, 184, 110, 0.08); }
+    .mon {
+      position: absolute; transform: translate(-50%, -50%);
+      width: 5.9%; height: 5.4%;
+      display: flex; align-items: center; justify-content: center; gap: 0.4cqw;
+      border-radius: 0.35cqw; border: 1px solid currentColor; cursor: pointer;
+      background: rgb(14, 12, 10); overflow: hidden; white-space: nowrap; padding: 0;
+      font: 700 clamp(5px, 1.15cqw, 15px) var(--mono); letter-spacing: 0.04em; text-transform: uppercase;
+      box-shadow: 0 0 1.2cqw currentColor; z-index: 2;
+    }
+    .mon i { width: 0.55cqw; height: 0.55cqw; min-width: 3px; min-height: 3px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+    .mon.idle { color: var(--idle); } .mon.busy { color: var(--busy); } .mon.error { color: var(--error); }
+    .mon.is-open { outline: 2px solid var(--gold); outline-offset: 2px; }
 
     /* Cards */
-    #floor { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; position: relative; }
+    #floor { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; position: relative; max-width: 1240px; margin: 0 auto; }
     #handoff-layer { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
     .particle { fill: var(--gold); } .particle-glow { fill: rgba(226, 184, 110, 0.3); }
     .card {
-      position: relative; border-radius: 14px; padding: 12px 14px; cursor: pointer;
+      position: relative; border-radius: 14px; padding: 20px 22px; cursor: pointer;
       border-left: 3px solid var(--idle); transition: border-color .2s, transform .15s;
     }
     .card:hover, .card:focus-visible { border-color: var(--brass-strong); outline: none; transform: translateY(-1px); }
@@ -157,61 +178,65 @@
     .card.is-busy { border-left-color: var(--busy); }
     .card.is-error { border-left-color: var(--error); box-shadow: 0 0 0 1px rgba(240, 103, 95, 0.35), 0 10px 30px rgba(0,0,0,.35); }
     .card.is-open { border-color: var(--gold); }
-    .card.owner { border-left-color: var(--gold); cursor: default; }
-    .card.owner:hover { transform: none; border-color: var(--brass); border-left-color: var(--gold); }
-    .top { display: flex; align-items: center; gap: 11px; }
-    .portrait { width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0; overflow: hidden; border: 2px solid var(--brass-strong); background: rgba(0,0,0,.25); }
+    .top { display: flex; align-items: center; gap: 14px; }
+    .portrait { width: 54px; height: 54px; border-radius: 50%; flex-shrink: 0; overflow: hidden; border: 2px solid var(--brass-strong); background: rgba(0,0,0,.25); }
     .portrait svg, .portrait img { width: 100%; height: 100%; display: block; object-fit: cover; }
     .iden { min-width: 0; flex: 1; }
-    .iden h3 { font-size: 15px; font-weight: 600; letter-spacing: 0.02em; }
-    .iden p { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .iden h3 { font-size: 18px; font-weight: 600; letter-spacing: 0.02em; }
+    .iden p { margin-top: 3px; font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .pill {
       display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
-      padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; text-transform: capitalize;
+      padding: 5px 12px; border-radius: 999px; font-size: 14px; font-weight: 600; text-transform: capitalize;
       border: 1px solid currentColor; background: rgba(0, 0, 0, 0.25);
     }
     .pill.idle { color: var(--idle); } .pill.busy { color: var(--busy); } .pill.error { color: var(--error); }
     .pill i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-    .task { margin-top: 9px; font-size: 13px; color: var(--text); line-height: 1.35; }
+    .task { margin-top: 16px; font-size: 15px; color: var(--text); line-height: 1.35; }
     .task:empty { display: none; }
-    .grid { display: grid; grid-template-columns: repeat(5, auto); justify-content: space-between; gap: 6px 10px; margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(214, 170, 98, 0.18); }
-    .grid div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-    .grid dt { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
-    .grid dd { font: 500 13px var(--mono); color: var(--text); white-space: nowrap; }
-    .extra { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 20px; margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(214, 170, 98, 0.18); }
+    .grid div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .grid dt { font-size: 14px; color: var(--muted); }
+    .grid dd { font-size: 20px; font-weight: 700; color: var(--text); white-space: nowrap; }
+    .grid dd small { font-size: 14px; font-weight: 400; color: var(--muted); }
+    .extra { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; color: var(--muted); }
     .extra:empty { display: none; }
-    .extra p { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+    .extra p { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
     .extra p span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .extra .ico { color: var(--gold); flex-shrink: 0; }
     .extra .alert { color: var(--error); }
+    .usage[hidden] { display: none; }
     .extra .alert .ico { color: var(--error); }
     .extra em { font-style: normal; color: var(--faint); flex-shrink: 0; }
 
     /* Detail panel */
     #panel {
-      position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 100vw); z-index: 8;
+      position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100vw); z-index: 8;
       background: var(--panel-strong); border-left: 1px solid var(--brass-strong);
       backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-      transform: translateX(105%); transition: transform .25s ease; overflow-y: auto; padding: 18px;
+      transform: translateX(105%); transition: transform .25s ease; overflow-y: auto; padding: 24px;
     }
     #panel.open { transform: none; }
     .panel-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
     .panel-head .portrait { width: 52px; height: 52px; }
-    .panel-head h2 { font-size: 17px; }
-    .panel-head p { font-size: 12px; color: var(--muted); }
+    .panel-head h2 { font-size: 20px; }
+    .panel-head p { font-size: 15px; color: var(--muted); }
     .close { margin-left: auto; background: none; border: 1px solid var(--brass); color: var(--text); width: 30px; height: 30px; border-radius: 8px; font-size: 18px; cursor: pointer; }
-    .block-label { display: block; margin: 14px 0 6px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold); }
+    .block-label { display: block; margin: 20px 0 8px; font-size: 14px; font-weight: 600; color: var(--gold); }
+    .pstat { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 0; border-bottom: 1px solid rgba(214, 170, 98, 0.18); font-size: 15px; color: var(--muted); }
+    .pstat b { font-size: 18px; color: var(--text); }
     #p-spark { width: 100%; height: 48px; display: block; }
-    .list { list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+    .list { list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
     .list li { display: flex; gap: 10px; }
-    .list time { color: var(--faint); font-family: var(--mono); flex-shrink: 0; min-width: 56px; }
+    .list time { color: var(--muted); flex-shrink: 0; min-width: 64px; }
     .list.alerts span { color: var(--error); }
 
     @media (max-width: 720px) {
-      header { padding: 10px 14px; }
+      header { padding: 12px 16px; }
       .counts { margin-left: 0; width: 100%; order: 3; }
       .clock { margin-left: auto; }
-      main { padding: 12px; }
+      .clock small { display: none; }
+      main { padding: 16px; }
+      .scene { border-radius: 10px; margin-bottom: 16px; }
       #floor { grid-template-columns: 1fr; }
       .usage .meta { margin-left: 0; }
     }
@@ -221,29 +246,6 @@
 <body class="is-live">
   <svg class="sprite" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" focusable="false">
     <defs>
-      <!-- Zaid: owner, short dark hair, beard, navy suit, gold tie -->
-      <symbol id="avatar-zaid" viewBox="0 0 80 80">
-        <circle cx="40" cy="40" r="40" fill="#1a2744"/>
-        <path d="M8 80 C12 58 24 53 40 53 C56 53 68 58 72 80Z" fill="#121b30"/>
-        <path d="M20 80 C24 64 30 58 40 58 C50 58 56 64 60 80Z" fill="#1c3258"/>
-        <path d="M34 62 L40 80 L46 62Z" fill="#e8eef6"/>
-        <path d="M40 62 L37.4 80 L42.6 80Z" fill="#c4a35a"/>
-        <path d="M34.2 47 C34.2 45.5 45.8 45.5 45.8 47 L45 57 C44.6 60.5 35.4 60.5 35 57Z" fill="#b07a4a"/>
-        <ellipse cx="23.2" cy="34" rx="3.1" ry="4.2" fill="#9a6a3e"/>
-        <ellipse cx="56.8" cy="34" rx="3.1" ry="4.2" fill="#9a6a3e"/>
-        <ellipse cx="40" cy="31.5" rx="16.3" ry="18" fill="#c68642"/>
-        <path d="M24.4 31 C24 17.5 32.5 13.5 40 13.5 C47.5 13.5 56 17.5 55.6 31 C54.2 21.5 48.8 18 40 18 C31.2 18 25.8 21.5 24.4 31Z" fill="#2a1c12"/>
-        <path d="M24.6 36.5 C25.2 49 32 54.5 40 54.5 C48 54.5 54.8 49 55.4 36.5 C52 46 28 46 24.6 36.5Z" fill="#2a1c12"/>
-        <ellipse cx="33.4" cy="32.4" rx="2.3" ry="2.7" fill="#2a1c12"/>
-        <ellipse cx="46.6" cy="32.4" rx="2.3" ry="2.7" fill="#2a1c12"/>
-        <circle cx="34.1" cy="31.7" r=".7" fill="#f3efe8"/>
-        <circle cx="47.3" cy="31.7" r=".7" fill="#f3efe8"/>
-        <path d="M29.2 27.6 Q33.4 25.6 37.8 27.4" fill="none" stroke="#2a1c12" stroke-width="1.4" stroke-linecap="round"/>
-        <path d="M42.2 27.4 Q46.6 25.6 50.8 27.6" fill="none" stroke="#2a1c12" stroke-width="1.4" stroke-linecap="round"/>
-        <path d="M40 33.2 L38.6 38 Q40 39.6 41.4 38Z" fill="#a06d42"/>
-        <path d="M35.8 42.4 Q40 45.2 44.2 42.4" fill="none" stroke="#7a4a32" stroke-width="1.3" stroke-linecap="round"/>
-      </symbol>
-
       <!-- DONNA: manager, chestnut bob, navy blazer, burgundy tie, clipboard -->
       <symbol id="avatar-donna" viewBox="0 0 80 80">
         <circle cx="40" cy="40" r="40" fill="#243056"/>
@@ -540,7 +542,10 @@
   </header>
 
   <main>
-    <section class="usage glass" aria-label="Weekly usage snapshot">
+    <section class="scene" id="scene" aria-label="Office floor with live status on each desk">
+      <img src="office.jpg" alt="Warm evening office: DONNA at the big desk on top, the other bots at their desks below" width="1280" height="600" />
+    </section>
+    <section class="usage glass" id="usage" aria-label="Weekly usage snapshot" hidden>
       <span class="lead">Week used <b id="u-used"></b></span>
       <span class="ubar"><i id="u-bar"></i></span>
       <ol id="u-list"></ol>
@@ -566,24 +571,11 @@
       // Live mode: the page reads status.json beside this file every 3 seconds.
       const USE_STATUS_JSON = true;
 
-      // Weekly usage snapshot (real numbers from the Grok Bot usage report, Nov 15, 2026 3:38 AM Dubai).
-      // These are not simulated. Update these values to refresh the panel.
-      const USAGE = {
-        asOf: "Snapshot Sun Nov 15, 3:38 AM",
-        weekUsedPct: 10,
-        resets: "resets Sun 11:52 PM (Dubai time)",
-        shares: [
-          { id: "donna",   label: "DONNA",   pct: 85 },
-          { id: "mailman", label: "Mailman", pct: 10 },
-          { id: "legal",   label: "Legal",   pct: 4 },
-          { id: "morgan",  label: "Morgan",  pct: 1 },
-          { id: null,      label: "Other",   pct: 0, text: "<1%" }
-        ]
-      };
+      // Weekly usage comes from the "usage" object in status.json (hidden when missing).
       const USAGE_TOP = 4;
+      const USAGE_TZ = "Asia/Dubai";
 
       const PEOPLE = [
-        { id: "zaid",     name: "Zaid",     role: "Owner",                 kind: "owner" },
         { id: "donna",    name: "DONNA",    role: "Manager / coordinator", kind: "bot" },
         { id: "milo",     name: "MILO",     role: "Software engineer",     kind: "bot" },
         { id: "colin",    name: "COLIN",    role: "Software engineer",     kind: "bot" },
@@ -595,7 +587,22 @@
         { id: "morgan",   name: "Morgan",   role: "Mortgage & lenders",    kind: "bot" },
         { id: "research", name: "Research", role: "Dashboard research",    kind: "bot" }
       ];
-      const BOTS = PEOPLE.filter((p) => p.kind === "bot");
+      const BOTS = PEOPLE;
+
+      // Monitor-screen centers and desk areas in office.jpg, in percent of the image (1280x600 render).
+      const SCENE = {
+        donna:    { mx: 46.9, my: 23.3, desk: [46.9, 15.0, 17.5, 25.0] },
+        milo:     { mx: 7.6,  my: 66.5, desk: [7.9,  56.0, 11.5, 30.0] },
+        colin:    { mx: 16.3, my: 67.3, desk: [16.6, 56.0, 10.5, 30.0] },
+        alex:     { mx: 31.1, my: 74.2, desk: [31.4, 62.0, 13.0, 30.0] },
+        audrey:   { mx: 47.2, my: 74.2, desk: [47.2, 62.0, 13.0, 30.0] },
+        security: { mx: 61.7, my: 73.2, desk: [61.4, 62.0, 7.0,  30.0] },
+        legal:    { mx: 68.1, my: 73.6, desk: [68.3, 62.0, 6.6,  30.0] },
+        mailman:  { mx: 79.4, my: 73.2, desk: [79.4, 62.0, 6.8,  30.0] },
+        morgan:   { mx: 86.1, my: 73.6, desk: [86.1, 62.0, 6.6,  30.0] },
+        research: { mx: 93.3, my: 73.6, desk: [93.5, 62.0, 7.2,  30.0] }
+      };
+      const sceneEls = {};
       const BY_ID = Object.fromEntries(PEOPLE.map((p) => [p.id, p]));
       const NAMES = Object.fromEntries(PEOPLE.map((p) => [p.id, p.name]));
       const FILLER = /^\s*(standing by|idle|none|—|-)?\s*$/i;
@@ -701,6 +708,30 @@
         return res.json();
       }
 
+      function buildScene() {
+        const scene = document.getElementById("scene");
+        BOTS.forEach((p) => {
+          const pos = SCENE[p.id];
+          if (!pos) return;
+          const [dx, dy, dw, dh] = pos.desk;
+          const desk = el("button", "desk");
+          desk.type = "button";
+          desk.style.left = dx + "%"; desk.style.top = dy + "%";
+          desk.style.width = dw + "%"; desk.style.height = dh + "%";
+          desk.setAttribute("aria-label", p.name + " desk. Open details");
+          const mon = el("button", "mon idle");
+          mon.type = "button";
+          mon.style.left = pos.mx + "%"; mon.style.top = pos.my + "%";
+          mon.appendChild(el("i"));
+          mon.appendChild(el("span", null, "idle"));
+          mon.setAttribute("aria-label", p.name + " status. Open details");
+          [desk, mon].forEach((n) => n.addEventListener("click", (e) => { e.stopPropagation(); openPanel(p.id); }));
+          scene.appendChild(desk);
+          scene.appendChild(mon);
+          sceneEls[p.id] = { desk: desk, mon: mon };
+        });
+      }
+
       function buildFloor() {
         const floor = document.getElementById("floor");
         PEOPLE.forEach((p) => floor.appendChild(buildCard(p)));
@@ -708,8 +739,7 @@
       }
 
       function buildCard(person) {
-        const isOwner = person.kind === "owner";
-        const card = el("article", "card glass" + (isOwner ? " owner" : ""));
+        const card = el("article", "card glass");
         card.dataset.id = person.id;
         const top = el("div", "top");
         const port = el("div", "portrait");
@@ -721,7 +751,7 @@
         top.appendChild(iden);
         card.appendChild(top);
         mountPortrait(port, person, null);
-        if (!isOwner) {
+        {
           const pill = el("span", "pill idle");
           pill.dataset.pill = "";
           pill.appendChild(el("i"));
@@ -731,13 +761,11 @@
           task.dataset.task = "";
           card.appendChild(task);
           const grid = el("dl", "grid");
-          [["done", "Done", "Tasks completed today"],
-           ["open", "Open", "Open tasks"],
-           ["msgs", "Msgs", "Messages today: sent ↑, received ↓"],
-           ["up", "Uptime", "Time since this bot started"],
-           ["active", "Active", "Last activity"]].forEach(([k, label, title]) => {
+          [["done", "Tasks done today"],
+           ["open", "Open tasks"],
+           ["msgs", "Messages today"],
+           ["up", "Running for"]].forEach(([k, label, title]) => {
             const d = el("div");
-            d.title = title;
             d.appendChild(el("dt", null, label));
             const dd = el("dd");
             dd.dataset.k = k;
@@ -782,12 +810,26 @@
         const m = bot.msgsToday || {};
         setDD(card, "done", String(bot.tasksCompletedToday || 0));
         setDD(card, "open", String(bot.openTasks || 0));
-        setDD(card, "msgs", (m.sent || 0) + "↑ " + (m.received || 0) + "↓");
         setDD(card, "up", durSince(bot.uptimeSince));
-        setDD(card, "active", relTime(lastActiveAt(bot)));
+        const md = card.querySelector('[data-k="msgs"]');
+        md.innerHTML = "";
+        md.appendChild(document.createTextNode(String(m.sent || 0)));
+        md.appendChild(el("small", null, " sent  "));
+        md.appendChild(document.createTextNode(String(m.received || 0)));
+        md.appendChild(el("small", null, " received"));
 
         const extra = card.querySelector("[data-extra]");
         extra.innerHTML = "";
+        const last = (bot.activity || []).find((a) => a && a.text);
+        if (last) {
+          const p = el("p");
+          p.title = "Last activity";
+          p.appendChild(el("b", "ico", "●"));
+          p.appendChild(el("span", null, last.text));
+          const t = relTime(last.at);
+          if (t) p.appendChild(el("em", null, t));
+          extra.appendChild(p);
+        }
         const errs = bot.errorCount || 0;
         const alerts = bot.alerts || [];
         if (errs > 0 || alerts.length) {
@@ -822,7 +864,16 @@
           counts.total += 1;
           if (counts[bot.status] != null) counts[bot.status] += 1;
           fillCard(cards[meta.id], meta, bot);
+          const sc = sceneEls[meta.id];
+          if (sc) {
+            const st = ["idle", "busy", "error"].includes(bot.status) ? bot.status : "idle";
+            sc.mon.className = "mon " + st + (openId === meta.id ? " is-open" : "");
+            sc.mon.querySelector("span").textContent = st;
+            sc.mon.title = meta.name + ": " + st;
+            sc.desk.classList.toggle("is-open", openId === meta.id);
+          }
         });
+        renderUsage(data.usage);
         ["total", "busy", "idle", "error"].forEach((k) => {
           document.getElementById("c-" + k).textContent = String(counts[k]);
         });
@@ -875,7 +926,7 @@
 
       function openPanel(id) {
         openId = id;
-        Object.keys(cards).forEach((k) => cards[k].classList.toggle("is-open", k === id));
+        markOpen();
         renderPanel(id);
         const panel = document.getElementById("panel");
         panel.classList.add("open");
@@ -885,7 +936,7 @@
       function closePanel() {
         if (!openId) return;
         openId = null;
-        Object.keys(cards).forEach((k) => cards[k].classList.remove("is-open"));
+        markOpen();
         const panel = document.getElementById("panel");
         panel.classList.remove("open");
         panel.setAttribute("aria-hidden", "true");
@@ -914,7 +965,14 @@
         mountPortrait(document.getElementById("p-avatar"), meta, bot);
         const body = document.getElementById("p-body");
         body.innerHTML = "";
-        body.appendChild(el("span", "block-label", "Last 12 hours"));
+        const since = durSince(bot.stateSince);
+        if (since) {
+          const st = el("div", "pstat");
+          st.appendChild(el("span", null, "In this status for"));
+          st.appendChild(el("b", null, since));
+          body.appendChild(st);
+        }
+        body.appendChild(el("span", "block-label", "Activity, last 12 hours"));
         const spark = sparkSVG(bot.activityHistory || [], 340, 48);
         spark.id = "p-spark";
         body.appendChild(spark);
@@ -930,17 +988,43 @@
         }
       }
 
-      function renderUsage() {
-        document.getElementById("u-used").textContent = USAGE.weekUsedPct + "%";
-        document.getElementById("u-bar").style.width = USAGE.weekUsedPct + "%";
+      function markOpen() {
+        Object.keys(cards).forEach((k) => cards[k].classList.toggle("is-open", k === openId));
+        Object.keys(sceneEls).forEach((k) => {
+          sceneEls[k].mon.classList.toggle("is-open", k === openId);
+          sceneEls[k].desk.classList.toggle("is-open", k === openId);
+        });
+      }
+
+      function fmtTime(iso) {
+        const d = iso ? new Date(iso) : null;
+        if (!d || !isFinite(d.getTime())) return "";
+        return new Intl.DateTimeFormat("en-US", { timeZone: USAGE_TZ, weekday: "short", hour: "numeric", minute: "2-digit" }).format(d);
+      }
+
+      function pctText(v) {
+        if (v == null || v === "") return "";
+        return String(v).replace(/%$/, "") + "%";
+      }
+
+      function renderUsage(u) {
+        const box = document.getElementById("usage");
+        if (!u || u.weekUsedPct == null) { box.hidden = true; return; }
+        box.hidden = false;
+        const used = Number(u.weekUsedPct);
+        document.getElementById("u-used").textContent = Math.round(used) + "%";
+        document.getElementById("u-bar").style.width = Math.min(100, Math.max(0, used)) + "%";
         const ol = document.getElementById("u-list");
         ol.innerHTML = "";
-        USAGE.shares.filter((u) => u.id).slice(0, USAGE_TOP).forEach((u) => {
-          const li = el("li", null, u.label);
-          li.appendChild(el("b", null, u.text || u.pct + "%"));
+        (u.shares || []).filter((r) => r && r.id && NAMES[r.id]).slice(0, USAGE_TOP).forEach((r) => {
+          const li = el("li", null, NAMES[r.id]);
+          li.appendChild(el("b", null, pctText(r.pct)));
           ol.appendChild(li);
         });
-        document.getElementById("u-meta").textContent = USAGE.asOf + " · " + USAGE.resets;
+        const parts = [];
+        if (u.snapshotAt) parts.push("Snapshot " + fmtTime(u.snapshotAt));
+        if (u.resetsAt) parts.push("resets " + fmtTime(u.resetsAt));
+        document.getElementById("u-meta").textContent = parts.length ? parts.join(" · ") + " (Dubai time)" : "";
       }
 
       function updateClock() {
@@ -970,7 +1054,7 @@
       document.getElementById("panel").addEventListener("click", (e) => e.stopPropagation());
       document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePanel(); });
 
-      renderUsage();
+      buildScene();
       buildFloor();
       updateClock();
       setInterval(updateClock, 1000);
@@ -979,7 +1063,7 @@
       requestAnimationFrame(loop);
 
       const preset = new URLSearchParams(location.search).get("panel");
-      if (preset && BY_ID[preset] && BY_ID[preset].kind === "bot") setTimeout(() => openPanel(preset), 300);
+      if (preset && BY_ID[preset]) setTimeout(() => openPanel(preset), 300);
     })();
   </script>
 </body>
