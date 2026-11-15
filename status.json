@@ -1,13 +1,13 @@
 {
-  "updatedAt": "2026-11-15T16:20:00.000Z",
+  "updatedAt": "2026-11-15T18:03:15Z",
   "messagesLastMinute": 0,
   "bots": [
     {
       "id": "donna",
       "name": "DONNA",
       "role": "Manager / coordinator",
-      "status": "idle",
-      "currentTask": "Standing by",
+      "status": "busy",
+      "currentTask": "Live update test",
       "avatar": "",
       "tasksCompletedToday": 0,
       "openTasks": 0,
