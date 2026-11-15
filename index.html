@@ -142,10 +142,10 @@
     .usage li b { color: var(--text); font-weight: 700; margin-left: 5px; }
     .usage .meta { margin-left: auto; color: var(--muted); font-size: 14px; }
 
-    /* Office scene: Alex's render, shown once, with live chips over each monitor */
+    /* Office scene: Alex's Apple-style render, shown once, with live chips over each monitor */
     .scene {
       position: relative; width: 100%; max-width: 1240px; margin: 0 auto 22px;
-      aspect-ratio: 1280 / 600; border-radius: 16px; overflow: hidden;
+      aspect-ratio: 1280 / 720; border-radius: 16px; overflow: hidden;
       border: 1px solid var(--brass); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
       container-type: inline-size;
     }
@@ -154,7 +154,7 @@
     .desk:hover, .desk:focus-visible, .desk.is-open { outline: 2px solid var(--brass-strong); outline-offset: -2px; background: rgba(226, 184, 110, 0.08); }
     .mon {
       position: absolute; transform: translate(-50%, -50%);
-      width: 5.9%; height: 5.4%;
+      width: 4.6%; height: 4.6%;
       display: flex; align-items: center; justify-content: center; gap: 0.4cqw;
       border-radius: 0.35cqw; border: 1px solid currentColor; cursor: pointer;
       background: rgb(14, 12, 10); overflow: hidden; white-space: nowrap; padding: 0;
@@ -543,7 +543,7 @@
 
   <main>
     <section class="scene" id="scene" aria-label="Office floor with live status on each desk">
-      <img src="office.jpg" alt="Warm evening office: DONNA at the big desk on top, the other bots at their desks below" width="1280" height="600" />
+      <img src="office.jpg" alt="Bright open-plan office: DONNA at the corner desk, the other bots at their team desks" width="1280" height="720" />
     </section>
     <section class="usage glass" id="usage" aria-label="Weekly usage snapshot" hidden>
       <span class="lead">Week used <b id="u-used"></b></span>
@@ -589,18 +589,18 @@
       ];
       const BOTS = PEOPLE;
 
-      // Monitor-screen centers and desk areas in office.jpg, in percent of the image (1280x600 render).
+      // Monitor-screen centers and desk areas in office.jpg, in percent of the image (1280x720 Apple-style render).
       const SCENE = {
-        donna:    { mx: 46.9, my: 23.3, desk: [46.9, 15.0, 17.5, 25.0] },
-        milo:     { mx: 7.6,  my: 66.5, desk: [7.9,  56.0, 11.5, 30.0] },
-        colin:    { mx: 16.3, my: 67.3, desk: [16.6, 56.0, 10.5, 30.0] },
-        alex:     { mx: 31.1, my: 74.2, desk: [31.4, 62.0, 13.0, 30.0] },
-        audrey:   { mx: 47.2, my: 74.2, desk: [47.2, 62.0, 13.0, 30.0] },
-        security: { mx: 61.7, my: 73.2, desk: [61.4, 62.0, 7.0,  30.0] },
-        legal:    { mx: 68.1, my: 73.6, desk: [68.3, 62.0, 6.6,  30.0] },
-        mailman:  { mx: 79.4, my: 73.2, desk: [79.4, 62.0, 6.8,  30.0] },
-        morgan:   { mx: 86.1, my: 73.6, desk: [86.1, 62.0, 6.6,  30.0] },
-        research: { mx: 93.3, my: 73.6, desk: [93.5, 62.0, 7.2,  30.0] }
+        donna:    { mx: 27.7, my: 21.7, desk: [27.7, 17.0, 10.5, 17.0] },
+        milo:     { mx: 42.8, my: 20.8, desk: [42.8, 17.0, 6.8,  16.0] },
+        colin:    { mx: 49.6, my: 20.8, desk: [49.6, 17.0, 6.8,  16.0] },
+        alex:     { mx: 61.5, my: 20.8, desk: [61.5, 17.0, 9.0,  16.0] },
+        audrey:   { mx: 76.0, my: 20.8, desk: [76.0, 17.0, 9.0,  16.0] },
+        security: { mx: 25.6, my: 49.5, desk: [25.6, 45.5, 8.2,  16.0] },
+        legal:    { mx: 33.8, my: 49.5, desk: [33.8, 45.5, 8.2,  16.0] },
+        mailman:  { mx: 61.4, my: 50.0, desk: [61.4, 45.5, 8.1,  16.0] },
+        morgan:   { mx: 69.6, my: 50.0, desk: [69.6, 45.5, 8.1,  16.0] },
+        research: { mx: 77.7, my: 50.0, desk: [77.7, 45.5, 8.1,  16.0] }
       };
       const sceneEls = {};
       const BY_ID = Object.fromEntries(PEOPLE.map((p) => [p.id, p]));
