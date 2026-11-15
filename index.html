@@ -80,18 +80,17 @@
       --mono: "SF Mono", "Cascadia Mono", "Consolas", ui-monospace, Menlo, monospace;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { min-height: 100%; color: var(--text); font-family: var(--sans); color-scheme: dark; background: #1a110b; }
+    html { min-height: 100%; background: #1a110b; }
+    body { min-height: 100vh; color: var(--text); font-family: var(--sans); color-scheme: dark; background: transparent; }
     body::before {
-      content: ""; position: fixed; inset: 0; z-index: -2;
+      content: ""; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -2;
       background: url("office.jpg") center / cover no-repeat;
-      filter: blur(3px) saturate(1.15);
-      transform: scale(1.04);
+      filter: blur(6px) saturate(1.1);
+      transform: scale(1.06);
     }
     body::after {
-      content: ""; position: fixed; inset: 0; z-index: -1;
-      background:
-        radial-gradient(ellipse 90% 75% at 50% 35%, rgba(60, 32, 12, 0.35), rgba(18, 10, 5, 0.8)),
-        linear-gradient(180deg, rgba(24, 14, 7, 0.5), rgba(14, 8, 4, 0.6));
+      content: ""; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1;
+      background: rgba(22, 12, 6, 0.66);
     }
     .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
     .glass {
