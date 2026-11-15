@@ -4,17 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Fleet Monitor</title>
+  <link rel="icon" href="data:," />
   <!--
     Fleet Monitor — office floor
     ----------------------------
-    Single-file dashboard. No backend required. To drive it from a real
-    source later, set USE_STATUS_JSON to true in the script below and
-    serve a status.json file next to this page. loadFleetStatus() is
-    the single function to swap.
+    Single-file dashboard in live mode: it reads status.json next to
+    this page every 3 seconds. office.jpg is the page background.
 
-    Weekly usage figures on the page come from the USAGE snapshot in
-    the script, not from the simulator. All other live-looking bot
-    metrics are simulated unless USE_STATUS_JSON is true.
+    Weekly usage figures come from the USAGE snapshot in the script.
 
     Expected status.json shape:
 
@@ -68,749 +65,158 @@
   -->
   <style>
     :root {
-      --bg: #07090d;
-      --bg-soft: #0d1118;
-      --header: rgba(10, 13, 20, 0.92);
-      --panel: #10151e;
-      --bay: rgba(16, 21, 30, 0.78);
-      --desk: #161c27;
-      --rail: #2a3344;
-      --line: rgba(232, 236, 242, 0.08);
-      --line-strong: rgba(232, 236, 242, 0.16);
-      --text: #e8ecf2;
-      --muted: #8b94a3;
-      --faint: #5c6573;
-      --idle: #3ee0b8;
-      --idle-dim: rgba(62, 224, 184, 0.18);
-      --busy: #f5c14a;
-      --busy-dim: rgba(245, 193, 74, 0.2);
-      --error: #f07178;
-      --error-dim: rgba(240, 113, 120, 0.2);
-      --accent: #8fb0ff;
-      --gold: #c4a35a;
-      --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+      --text: #f4ead9;
+      --muted: #c9b597;
+      --faint: #94806a;
+      --panel: rgba(38, 24, 15, 0.66);
+      --panel-strong: rgba(30, 19, 12, 0.86);
+      --brass: rgba(214, 170, 98, 0.38);
+      --brass-strong: rgba(226, 184, 110, 0.7);
+      --gold: #e2b86e;
+      --idle: #5fd68f;
+      --busy: #f6b53f;
+      --error: #f0675f;
       --sans: "Segoe UI", "Avenir Next", "Trebuchet MS", system-ui, -apple-system, sans-serif;
       --mono: "SF Mono", "Cascadia Mono", "Consolas", ui-monospace, Menlo, monospace;
     }
-
     * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    html, body {
-      height: 100%;
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--sans);
-      color-scheme: dark;
+    html, body { min-height: 100%; color: var(--text); font-family: var(--sans); color-scheme: dark; background: #1a110b; }
+    body::before {
+      content: ""; position: fixed; inset: 0; z-index: -2;
+      background: url("office.jpg") center / cover no-repeat;
+      filter: blur(3px) saturate(1.15);
+      transform: scale(1.04);
     }
-
-    body {
+    body::after {
+      content: ""; position: fixed; inset: 0; z-index: -1;
       background:
-        radial-gradient(ellipse 80% 50% at 50% 0%, rgba(80, 110, 170, 0.1), transparent 55%),
-        var(--bg);
+        radial-gradient(ellipse 90% 75% at 50% 35%, rgba(60, 32, 12, 0.35), rgba(18, 10, 5, 0.8)),
+        linear-gradient(180deg, rgba(24, 14, 7, 0.5), rgba(14, 8, 4, 0.6));
+    }
+    .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .glass {
+      background: var(--panel);
+      border: 1px solid var(--brass);
+      backdrop-filter: blur(10px) saturate(1.1);
+      -webkit-backdrop-filter: blur(10px) saturate(1.1);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 220, 160, 0.08);
     }
 
-    #app {
-      display: flex;
-      flex-direction: column;
-      min-height: 100%;
-      height: 100%;
-    }
-
+    /* Top bar */
     header {
-      display: flex;
-      align-items: center;
-      gap: 20px;
-      height: 64px;
-      padding: 0 22px;
-      background: var(--header);
-      border-bottom: 1px solid var(--line);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      z-index: 6;
-      flex-shrink: 0;
+      position: sticky; top: 0; z-index: 5;
+      display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px;
+      padding: 10px 20px;
+      background: rgba(28, 17, 10, 0.78);
+      border-bottom: 1px solid var(--brass);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     }
-
-    .brand { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
-    .brand-text { display: flex; flex-direction: column; gap: 1px; }
-    .brand-text strong {
-      font-size: 14px;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-    .brand-text span {
-      font-size: 11px;
-      color: var(--muted);
-    }
-
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand strong { font-size: 14px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
     .live {
-      display: none;
-      align-items: center;
-      gap: 6px;
-      margin-left: 6px;
-      color: var(--idle);
-      font-family: var(--mono);
-      font-size: 10px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
+      display: none; align-items: center; gap: 6px;
+      padding: 2px 8px; border-radius: 999px;
+      border: 1px solid rgba(95, 214, 143, 0.45); background: rgba(95, 214, 143, 0.12);
+      color: var(--idle); font: 600 10px var(--mono); letter-spacing: 0.1em; text-transform: uppercase;
     }
     body.is-live .live { display: inline-flex; }
-    .live i {
-      width: 7px; height: 7px; border-radius: 50%;
-      background: var(--idle);
-      box-shadow: 0 0 8px var(--idle);
-      animation: blink 2.2s ease-in-out infinite;
-    }
+    .live i { width: 7px; height: 7px; border-radius: 50%; background: var(--idle); box-shadow: 0 0 8px var(--idle); animation: pulse 2s infinite; }
+    @keyframes pulse { 50% { opacity: 0.35; } }
+    .counts { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-left: auto; font-size: 12px; color: var(--muted); }
+    .counts span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+    .counts b { color: var(--text); font: 600 13px var(--mono); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+    .dot.idle { background: var(--idle); } .dot.busy { background: var(--busy); } .dot.error { background: var(--error); }
+    .clock { font: 12px var(--mono); color: var(--muted); white-space: nowrap; }
+    .clock small { color: var(--faint); margin-left: 4px; }
 
-    .demo-tag {
-      display: none;
-      align-items: center;
-      height: 22px;
-      padding: 0 8px;
-      border: 1px dashed rgba(245, 193, 74, 0.5);
-      border-radius: 999px;
-      color: var(--busy);
-      font-family: var(--mono);
-      font-size: 10px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      white-space: nowrap;
-    }
-    body.is-demo .demo-tag { display: inline-flex; }
+    main { padding: 14px 20px 24px; max-width: 1500px; margin: 0 auto; }
 
-    .stats { display: flex; align-items: stretch; gap: 8px; margin-left: auto; }
-    .stat {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      min-width: 72px;
-      padding: 5px 11px;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid var(--line);
-      border-radius: 10px;
+    /* Weekly usage: one compact line */
+    .usage {
+      display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px;
+      padding: 8px 14px; border-radius: 12px; margin-bottom: 14px; font-size: 12px; color: var(--muted);
     }
-    .stat b {
-      font-family: var(--mono);
-      font-size: 16px;
-      font-weight: 500;
-      font-variant-numeric: tabular-nums;
-      line-height: 1.2;
-    }
-    .stat em {
-      font-style: normal;
-      font-size: 10px;
-      color: var(--muted);
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-    .stat[data-k="busy"] b { color: var(--busy); }
-    .stat[data-k="idle"] b { color: var(--idle); }
-    .stat[data-k="error"] b { color: var(--error); }
-    .stat[data-k="msgs"] b { color: var(--accent); }
-    .stat[data-k="usage"] b { color: var(--accent); }
-    .stat .ubar {
-      display: block; width: 100%; height: 3px; margin-top: 4px;
-      border-radius: 2px; background: rgba(255,255,255,0.08); overflow: hidden;
-    }
-    .stat .ubar i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
+    .usage .lead { color: var(--text); white-space: nowrap; }
+    .usage .lead b { color: var(--gold); font-family: var(--mono); }
+    .ubar { width: 90px; height: 6px; border-radius: 3px; background: rgba(255, 230, 190, 0.12); overflow: hidden; }
+    .ubar i { display: block; height: 100%; background: linear-gradient(90deg, #c9934a, var(--gold)); }
+    .usage ol { display: flex; flex-wrap: wrap; gap: 4px 12px; list-style: none; }
+    .usage li b { color: var(--text); font-family: var(--mono); font-weight: 500; margin-left: 4px; }
+    .usage .meta { margin-left: auto; color: var(--faint); font-size: 11px; }
 
-    .clock {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 2px;
-      margin-left: 8px;
-      min-width: 148px;
-      padding-left: 18px;
-      border-left: 1px solid var(--line);
-      flex-shrink: 0;
+    /* Cards */
+    #floor { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; position: relative; }
+    #handoff-layer { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+    .particle { fill: var(--gold); } .particle-glow { fill: rgba(226, 184, 110, 0.3); }
+    .card {
+      position: relative; border-radius: 14px; padding: 12px 14px; cursor: pointer;
+      border-left: 3px solid var(--idle); transition: border-color .2s, transform .15s;
     }
-    .clock time {
-      font-family: var(--mono);
-      font-size: 13px;
-      font-variant-numeric: tabular-nums;
+    .card:hover, .card:focus-visible { border-color: var(--brass-strong); outline: none; transform: translateY(-1px); }
+    .card.is-idle { border-left-color: var(--idle); }
+    .card.is-busy { border-left-color: var(--busy); }
+    .card.is-error { border-left-color: var(--error); box-shadow: 0 0 0 1px rgba(240, 103, 95, 0.35), 0 10px 30px rgba(0,0,0,.35); }
+    .card.is-open { border-color: var(--gold); }
+    .card.owner { border-left-color: var(--gold); cursor: default; }
+    .card.owner:hover { transform: none; border-color: var(--brass); border-left-color: var(--gold); }
+    .top { display: flex; align-items: center; gap: 11px; }
+    .portrait { width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0; overflow: hidden; border: 2px solid var(--brass-strong); background: rgba(0,0,0,.25); }
+    .portrait svg, .portrait img { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .iden { min-width: 0; flex: 1; }
+    .iden h3 { font-size: 15px; font-weight: 600; letter-spacing: 0.02em; }
+    .iden p { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+      padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; text-transform: capitalize;
+      border: 1px solid currentColor; background: rgba(0, 0, 0, 0.25);
     }
-    .clock small {
-      color: var(--muted);
-      font-size: 10px;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
+    .pill.idle { color: var(--idle); } .pill.busy { color: var(--busy); } .pill.error { color: var(--error); }
+    .pill i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .task { margin-top: 9px; font-size: 13px; color: var(--text); line-height: 1.35; }
+    .task:empty { display: none; }
+    .grid { display: grid; grid-template-columns: repeat(5, auto); justify-content: space-between; gap: 6px 10px; margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(214, 170, 98, 0.18); }
+    .grid div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+    .grid dt { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+    .grid dd { font: 500 13px var(--mono); color: var(--text); white-space: nowrap; }
+    .extra { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+    .extra:empty { display: none; }
+    .extra p { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+    .extra p span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .extra .ico { color: var(--gold); flex-shrink: 0; }
+    .extra .alert { color: var(--error); }
+    .extra .alert .ico { color: var(--error); }
+    .extra em { font-style: normal; color: var(--faint); flex-shrink: 0; }
 
-    main {
-      position: relative;
-      flex: 1;
-      min-height: 0;
-      overflow: auto;
-    }
-
-    .hero {
-      position: relative;
-      margin: 22px 300px 0 22px;
-      border-radius: 14px;
-      overflow: hidden;
-      border: 1px solid rgba(255,255,255,0.08);
-      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
-      height: clamp(220px, 34vw, 440px);
-      background: #1a140f url("office.jpg") center / cover no-repeat;
-    }
-    .hero::after {
-      content: "";
-      position: absolute; inset: 0;
-      background: linear-gradient(to bottom, rgba(0,0,0,0) 65%, rgba(10,12,18,0.55) 100%);
-    }
-    @media (max-width: 900px) { .hero { margin: 14px 14px 0; } }
-
-    .floor-wrap {
-      position: relative;
-      min-height: 100%;
-      padding: 22px 300px 80px 22px;
-    }
-
-    #floor {
-      position: relative;
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr 1fr;
-      grid-template-areas:
-        "owner owner owner owner"
-        "mgr   mgr   mgr   mgr"
-        "eng   eng   design audit"
-        "comp  comp  prop  prop";
-      gap: 16px;
-      max-width: 1440px;
-      margin: 0 auto;
-    }
-
-    #handoff-layer {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      overflow: visible;
-      z-index: 3;
-    }
-    .particle { fill: #eef3ff; }
-    .particle-glow { fill: rgba(215, 228, 255, 0.35); }
-
-    .bay {
-      background: var(--bay);
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 12px 12px 14px;
-      min-width: 0;
-    }
-    .bay.owner { grid-area: owner; background: linear-gradient(180deg, rgba(196,163,90,0.07), var(--bay)); }
-    .bay.manager { grid-area: mgr; }
-    .bay.engineering { grid-area: eng; }
-    .bay.design { grid-area: design; }
-    .bay.audit { grid-area: audit; }
-    .bay.compliance { grid-area: comp; }
-    .bay.property { grid-area: prop; }
-
-    .bay h2 {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 0 2px 10px;
-      color: var(--muted);
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-    }
-    .bay h2 i {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 2px;
-      background: var(--accent);
-      opacity: 0.8;
-    }
-    .bay.owner h2 i { background: var(--gold); }
-    .bay.manager h2 i { background: var(--accent); }
-    .bay.engineering h2 i { background: var(--idle); }
-    .bay.design h2 i { background: #e08b6a; }
-    .bay.audit h2 i { background: #c56b7a; }
-    .bay.compliance h2 i { background: #8b94a3; }
-    .bay.property h2 i { background: #8fbf7a; }
-
-    .seats {
-      display: grid;
-      gap: 10px;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    }
-    .bay.owner .seats,
-    .bay.manager .seats {
-      grid-template-columns: minmax(280px, 560px);
-      justify-content: center;
-    }
-
-    .cube, .office {
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-      min-width: 0;
-      padding: 12px 12px 10px;
-      background: var(--desk);
-      border: 1px solid var(--line);
-      border-radius: 4px 4px 10px 10px;
-      cursor: pointer;
-      text-align: left;
-      color: inherit;
-      font: inherit;
-      box-shadow: inset 0 10px 0 0 var(--rail);
-      padding-top: 18px;
-      transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
-    }
-    .cube:hover, .office:hover, .cube:focus-visible, .office:focus-visible {
-      background: #1c2432;
-      border-color: var(--line-strong);
-      outline: none;
-    }
-    .cube.is-open, .office.is-open {
-      border-color: rgba(232, 236, 242, 0.35);
-      box-shadow: inset 0 10px 0 0 var(--rail), 0 0 0 1px rgba(232,236,242,0.2);
-    }
-    .cube.is-busy { box-shadow: inset 0 10px 0 0 var(--rail), 0 0 0 1px rgba(245,193,74,0.22); }
-    .cube.is-error {
-      box-shadow: inset 0 10px 0 0 var(--rail);
-      border-style: dashed;
-      border-color: rgba(240, 113, 120, 0.55);
-    }
-    .cube.is-busy .portrait { box-shadow: 0 0 0 2px var(--busy), 0 0 14px rgba(245,193,74,0.35); }
-    .cube.is-idle .portrait { box-shadow: 0 0 0 2px var(--idle); }
-    .cube.is-error .portrait { box-shadow: 0 0 0 2px var(--error); }
-    .cube.is-busy .portrait { animation: ringpulse 1.8s ease-in-out infinite; }
-    .office .portrait { box-shadow: 0 0 0 2px var(--gold); }
-
-    .top {
-      display: grid;
-      grid-template-columns: 56px 1fr;
-      gap: 10px;
-      align-items: start;
-      min-width: 0;
-    }
-    .office .top { grid-template-columns: 72px 1fr; }
-
-    .portrait {
-      width: 56px;
-      height: 56px;
-      border-radius: 50%;
-      overflow: hidden;
-      background: #1a212d;
-      flex-shrink: 0;
-    }
-    .office .portrait { width: 72px; height: 72px; }
-    .portrait svg, .portrait img {
-      width: 100%;
-      height: 100%;
-      display: block;
-      object-fit: cover;
-    }
-
-    .iden { min-width: 0; }
-    .name-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      min-width: 0;
-    }
-    .name-row h3 {
-      font-size: 13px;
-      font-weight: 650;
-      letter-spacing: 0.03em;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .role {
-      margin-top: 1px;
-      color: var(--muted);
-      font-size: 10px;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-    .task {
-      margin-top: 4px;
-      font-size: 11px;
-      line-height: 1.35;
-      color: var(--text);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      height: 18px;
-      padding: 0 7px;
-      border-radius: 999px;
-      font-family: var(--mono);
-      font-size: 9px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      flex-shrink: 0;
-    }
-    .badge i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-    .badge.idle { color: var(--idle); background: var(--idle-dim); }
-    .badge.busy { color: var(--busy); background: var(--busy-dim); }
-    .badge.error { color: var(--error); background: var(--error-dim); }
-    .badge.owner { color: var(--gold); background: rgba(196,163,90,0.16); }
-
-    .err-pill {
-      display: none;
-      align-items: center;
-      justify-content: center;
-      min-width: 16px;
-      height: 16px;
-      padding: 0 5px;
-      border-radius: 999px;
-      background: var(--error);
-      color: #1a0a0c;
-      font-family: var(--mono);
-      font-size: 9px;
-      font-weight: 600;
-      flex-shrink: 0;
-    }
-    .err-pill.show { display: inline-flex; }
-
-    .last {
-      display: flex;
-      gap: 8px;
-      align-items: baseline;
-      min-width: 0;
-      color: var(--muted);
-      font-size: 11px;
-      line-height: 1.3;
-    }
-    .last .k {
-      color: var(--faint);
-      font-size: 9px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-    .last .k { flex-shrink: 0; }
-    .last .txt {
-      min-width: 0;
-      flex: 0 1 auto;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      color: var(--text);
-    }
-    .last time {
-      color: var(--faint);
-      font-family: var(--mono);
-      font-size: 9px;
-      font-variant-numeric: tabular-nums;
-      white-space: nowrap;
-    }
-
-    .chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-    }
-    .chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      height: 18px;
-      padding: 0 6px;
-      border-radius: 4px;
-      background: rgba(255,255,255,0.035);
-      border: 1px solid var(--line);
-      color: var(--muted);
-      font-family: var(--mono);
-      font-size: 9px;
-      letter-spacing: 0.02em;
-      font-variant-numeric: tabular-nums;
-      white-space: nowrap;
-    }
-    .chip b { color: var(--text); font-weight: 500; }
-    .chip.none b { color: var(--faint); font-weight: 400; }
-    .chip.snap { border-color: rgba(143,176,255,0.2); }
-    .chip.warn { color: var(--error); border-color: rgba(240,113,120,0.3); background: var(--error-dim); }
-    .chip.warn b { color: var(--error); }
-
-    .foot {
-      display: grid;
-      grid-template-columns: 1fr auto auto;
-      gap: 8px;
-      align-items: center;
-      min-width: 0;
-    }
-    .handoff {
-      min-width: 0;
-      color: var(--muted);
-      font-size: 10px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .handoff em { font-style: normal; color: var(--accent); }
-    .spark { width: 56px; height: 16px; display: block; }
-    .demo-mark {
-      display: none;
-      color: var(--busy);
-      font-family: var(--mono);
-      font-size: 8px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-    }
-    body.is-demo .cube .demo-mark { display: inline; }
-
-    .office .note {
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.4;
-    }
-
-    .legend {
-      position: absolute;
-      left: 22px;
-      bottom: 22px;
-      display: flex;
-      gap: 14px;
-      z-index: 4;
-      color: var(--muted);
-      font-size: 11px;
-      letter-spacing: 0.04em;
-      pointer-events: none;
-    }
-    .legend span { display: inline-flex; align-items: center; gap: 6px; }
-    .legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-    .legend .l-idle { background: var(--idle); box-shadow: 0 0 8px var(--idle); }
-    .legend .l-busy { background: var(--busy); box-shadow: 0 0 8px var(--busy); }
-    .legend .l-error { background: var(--error); box-shadow: 0 0 8px var(--error); }
-
-    .usage-card {
-      position: fixed;
-      right: 22px;
-      bottom: 22px;
-      width: 260px;
-      padding: 14px 16px;
-      border-radius: 14px;
-      background: rgba(14,18,28,0.9);
-      border: 1px solid rgba(255,255,255,0.08);
-      backdrop-filter: blur(8px);
-      font-size: 12px;
-      z-index: 6;
-      transition: opacity 0.25s;
-    }
-    .usage-card h3 { margin: 0 0 2px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
-    .usage-card .sub { opacity: 0.55; margin-bottom: 10px; display: block; }
-    .usage-card .total { display: flex; justify-content: space-between; margin-bottom: 6px; }
-    .usage-card .bigbar { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; margin-bottom: 12px; }
-    .usage-card .bigbar i { display: block; height: 100%; background: var(--accent); }
-    .usage-card ul { list-style: none; margin: 0; padding: 0; }
-    .usage-card li { display: grid; grid-template-columns: 90px 1fr 38px; align-items: center; gap: 8px; margin: 5px 0; }
-    .usage-card li .bar { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.06); overflow: hidden; }
-    .usage-card li .bar i { display: block; height: 100%; background: var(--idle); }
-    .usage-card li span:last-child { text-align: right; opacity: 0.8; }
-    .usage-card .reset { margin-top: 10px; opacity: 0.55; display: block; }
-    .usage-card .snap-tag {
-      display: inline-block;
-      margin-left: 6px;
-      color: var(--accent);
-      font-family: var(--mono);
-      font-size: 9px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-    body.panel-open .usage-card,
-    body.panel-open .legend { opacity: 0; visibility: hidden; pointer-events: none; }
-
+    /* Detail panel */
     #panel {
-      position: fixed;
-      top: 80px;
-      right: 16px;
-      bottom: 16px;
-      width: min(420px, calc(100% - 32px));
-      display: flex;
-      flex-direction: column;
-      background-color: #10151e;
-      border: 1px solid var(--line-strong);
-      border-radius: 16px;
-      box-shadow: var(--shadow);
-      transform: translateX(24px);
-      visibility: hidden;
-      pointer-events: none;
-      z-index: 20;
-      overflow: hidden;
+      position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 100vw); z-index: 8;
+      background: var(--panel-strong); border-left: 1px solid var(--brass-strong);
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      transform: translateX(105%); transition: transform .25s ease; overflow-y: auto; padding: 18px;
     }
-    #panel::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: #10151e;
-      border-radius: 16px;
-      z-index: 0;
-    }
-    .panel-head, .panel-body { position: relative; z-index: 1; }
-    #panel.open {
-      transform: translateX(0);
-      visibility: visible;
-      pointer-events: auto;
-      animation: slide-in 0.22s ease-out;
-    }
-    .panel-head {
-      display: flex;
-      align-items: flex-start;
-      gap: 14px;
-      padding: 20px 20px 16px;
-      border-bottom: 1px solid var(--line);
-    }
-    #p-avatar.portrait {
-      width: 88px;
-      height: 88px;
-      box-shadow: 0 0 0 2px var(--idle);
-      flex-shrink: 0;
-    }
-    #p-avatar[data-status="busy"] { box-shadow: 0 0 0 2px var(--busy); }
-    #p-avatar[data-status="error"] { box-shadow: 0 0 0 2px var(--error); }
-    #p-avatar[data-status="owner"] { box-shadow: 0 0 0 2px var(--gold); }
-    .who { flex: 1; min-width: 0; }
-    .who h2 { font-size: 18px; font-weight: 600; letter-spacing: 0.02em; }
-    .who p { margin-top: 2px; color: var(--muted); font-size: 12px; }
-    .close {
-      width: 32px; height: 32px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: transparent;
-      color: var(--muted);
-      cursor: pointer;
-      font-size: 18px;
-      line-height: 1;
-    }
-    .close:hover, .close:focus-visible { color: var(--text); border-color: var(--line-strong); outline: none; }
-    .panel-body { padding: 16px 20px 24px; overflow: auto; flex: 1; }
-    .panel-flags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 14px; }
-    .sim-note {
-      display: none;
-      color: var(--busy);
-      font-family: var(--mono);
-      font-size: 10px;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-    body.is-demo #panel:not(.is-owner) .sim-note { display: inline; }
-    .block-label {
-      display: block;
-      margin: 14px 0 7px;
-      color: var(--faint);
-      font-size: 10px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-    }
-    .taskbox {
-      padding: 11px 12px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      font-size: 14px;
-      line-height: 1.45;
-    }
-    .metrics {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-    }
-    .metric {
-      padding: 10px 12px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid var(--line);
-      border-radius: 10px;
-    }
-    .metric b {
-      display: block;
-      font-family: var(--mono);
-      font-size: 16px;
-      font-weight: 500;
-      font-variant-numeric: tabular-nums;
-    }
-    .metric span {
-      display: block;
-      margin-top: 2px;
-      color: var(--faint);
-      font-size: 10px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-    .metric.alert b { color: var(--error); }
-    .metric.snap b { color: var(--accent); }
-    .alerts { list-style: none; }
-    .alerts li {
-      display: grid;
-      grid-template-columns: 64px 1fr;
-      gap: 10px;
-      padding: 8px 0;
-      border-top: 1px solid var(--line);
-      font-size: 13px;
-      color: var(--error);
-    }
-    .alerts time, .activity time {
-      color: var(--faint);
-      font-family: var(--mono);
-      font-size: 10px;
-      padding-top: 2px;
-    }
-    .activity { list-style: none; }
-    .activity li {
-      display: grid;
-      grid-template-columns: 64px 1fr;
-      gap: 10px;
-      padding: 9px 0;
-      border-top: 1px solid var(--line);
-      font-size: 13px;
-      line-height: 1.4;
-    }
-    .empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+    #panel.open { transform: none; }
+    .panel-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .panel-head .portrait { width: 52px; height: 52px; }
+    .panel-head h2 { font-size: 17px; }
+    .panel-head p { font-size: 12px; color: var(--muted); }
+    .close { margin-left: auto; background: none; border: 1px solid var(--brass); color: var(--text); width: 30px; height: 30px; border-radius: 8px; font-size: 18px; cursor: pointer; }
+    .block-label { display: block; margin: 14px 0 6px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold); }
     #p-spark { width: 100%; height: 48px; display: block; }
+    .list { list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+    .list li { display: flex; gap: 10px; }
+    .list time { color: var(--faint); font-family: var(--mono); flex-shrink: 0; min-width: 56px; }
+    .list.alerts span { color: var(--error); }
 
-    .sprite { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: hidden; }
-
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.35; }
+    @media (max-width: 720px) {
+      header { padding: 10px 14px; }
+      .counts { margin-left: 0; width: 100%; order: 3; }
+      .clock { margin-left: auto; }
+      main { padding: 12px; }
+      #floor { grid-template-columns: 1fr; }
+      .usage .meta { margin-left: 0; }
     }
-    @keyframes ringpulse {
-      0%, 100% { box-shadow: 0 0 0 2px var(--busy), 0 0 10px rgba(245,193,74,0.25); }
-      50% { box-shadow: 0 0 0 3px var(--busy), 0 0 18px rgba(245,193,74,0.5); }
-    }
-    @keyframes slide-in {
-      from { transform: translateX(24px); }
-      to { transform: translateX(0); }
-    }
-
-    @media (max-width: 1180px) {
-      #floor {
-        grid-template-columns: 1fr 1fr;
-        grid-template-areas:
-          "owner owner"
-          "mgr mgr"
-          "eng eng"
-          "design audit"
-          "comp prop";
-      }
-      .stat { min-width: 58px; padding: 5px 8px; }
-      .clock { min-width: 120px; padding-left: 12px; }
-      header { gap: 12px; padding: 0 14px; }
-    }
-    @media (max-width: 760px) {
-      #floor { grid-template-columns: 1fr; grid-template-areas: "owner" "mgr" "eng" "design" "audit" "comp" "prop"; }
-      .brand-text span { display: none; }
-      .floor-wrap { padding: 16px 16px 230px; }
-      .usage-card { width: calc(100% - 28px); }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .live i, .cube.is-busy .portrait { animation: none; }
-      #panel.open { animation: none; }
-    }
+    @media (prefers-reduced-motion: reduce) { .live i { animation: none; } }
   </style>
 </head>
 <body class="is-live">
@@ -1119,84 +525,54 @@
       </symbol>
     </defs>
   </svg>
-  <div id="app">
-    <header>
-      <div class="brand">
-        <div class="mark" aria-hidden="true">
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <rect x="3" y="8" width="8" height="8" rx="1.2" stroke="#8fb0ff" stroke-width="1.4"/>
-            <rect x="17" y="8" width="8" height="8" rx="1.2" stroke="#8fb0ff" stroke-width="1.4"/>
-            <rect x="10" y="16" width="8" height="8" rx="1.2" stroke="#c4a35a" stroke-width="1.4"/>
-            <path d="M7 8 V6 H21 V8" stroke="rgba(143,176,255,0.55)" stroke-width="1.2"/>
-          </svg>
-        </div>
-        <div class="brand-text">
-          <strong>Fleet Monitor</strong>
-          <span>Office floor <em class="live"><i></i> Live</em></span>
-        </div>
-      </div>
-      <span class="demo-tag" id="demo-tag">Demo data</span>
-      <div class="stats" id="stats">
-        <div class="stat" data-k="total"><b id="c-total">0</b><em>Total</em></div>
-        <div class="stat" data-k="busy"><b id="c-busy">0</b><em>Busy</em></div>
-        <div class="stat" data-k="idle"><b id="c-idle">0</b><em>Idle</em></div>
-        <div class="stat" data-k="error"><b id="c-error">0</b><em>Error</em></div>
-        <div class="stat" data-k="msgs"><b id="c-msgs">0</b><em>Msgs / 1m</em></div>
-        <div class="stat" data-k="usage"><b id="c-usage">0%</b><em>Week used</em><span class="ubar"><i id="c-ubar"></i></span></div>
-      </div>
-      <div class="clock">
-        <time id="clock">--</time>
-        <small id="tz">Local time</small>
-      </div>
-    </header>
+  <header>
+    <div class="brand">
+      <strong>Fleet Monitor</strong>
+      <em class="live"><i></i>Live</em>
+    </div>
+    <div class="counts" aria-label="Fleet counts">
+      <span><b id="c-total">0</b> bots</span>
+      <span><i class="dot busy"></i><b id="c-busy">0</b> busy</span>
+      <span><i class="dot idle"></i><b id="c-idle">0</b> idle</span>
+      <span><i class="dot error"></i><b id="c-error">0</b> error</span>
+      <span><b id="c-msgs">0</b> msgs/min</span>
+    </div>
+    <div class="clock"><time id="clock">--</time><small id="tz"></small></div>
+  </header>
 
-    <main>
-      <div class="hero" role="img" aria-label="Warm evening office with the bot team at their desks"></div>
-      <div class="floor-wrap" id="floor-wrap">
-        <div id="floor"></div>
-        <svg id="handoff-layer" aria-hidden="true"></svg>
-      </div>
-      <div class="legend">
-        <span><i class="l-idle"></i> Idle</span>
-        <span><i class="l-busy"></i> Busy</span>
-        <span><i class="l-error"></i> Error</span>
-      </div>
-      <div class="usage-card" id="usage-card">
-        <h3>Weekly usage <span class="snap-tag">Snapshot</span></h3>
-        <span class="sub" id="u-asof"></span>
-        <div class="total"><span>Weekly limit used</span><b id="u-used"></b></div>
-        <div class="bigbar"><i id="u-bigbar"></i></div>
-        <span class="sub" style="margin-bottom:4px">Share of this week's usage, by bot</span>
-        <ul id="u-list"></ul>
-        <span class="reset" id="u-reset"></span>
-      </div>
-      <aside id="panel" aria-hidden="true">
-        <div class="panel-head">
-          <div class="portrait" id="p-avatar" data-status="idle"></div>
-          <div class="who">
-            <h2 id="p-name">—</h2>
-            <p id="p-role">—</p>
-          </div>
-          <button type="button" class="close" id="p-close" aria-label="Close detail panel">&times;</button>
-        </div>
-        <div class="panel-body" id="p-body"></div>
-      </aside>
-    </main>
-  </div>
+  <main>
+    <section class="usage glass" aria-label="Weekly usage snapshot">
+      <span class="lead">Week used <b id="u-used"></b></span>
+      <span class="ubar"><i id="u-bar"></i></span>
+      <ol id="u-list"></ol>
+      <span class="meta" id="u-meta"></span>
+    </section>
+    <div id="floor">
+      <svg id="handoff-layer" aria-hidden="true"></svg>
+    </div>
+  </main>
 
+  <aside id="panel" aria-hidden="true">
+    <div class="panel-head">
+      <div class="portrait" id="p-avatar"></div>
+      <div><h2 id="p-name"></h2><p id="p-role"></p></div>
+      <button type="button" class="close" id="p-close" aria-label="Close detail panel">&times;</button>
+    </div>
+    <div id="p-body"></div>
+  </aside>
   <script>
     (function () {
       "use strict";
 
-      // Set to true and place status.json beside this file to replace the simulator.
+      // Live mode: the page reads status.json beside this file every 3 seconds.
       const USE_STATUS_JSON = true;
 
       // Weekly usage snapshot (real numbers from the Grok Bot usage report, Nov 15, 2026 3:38 AM Dubai).
       // These are not simulated. Update these values to refresh the panel.
       const USAGE = {
-        asOf: "Snapshot from Sun Nov 15, 3:38 AM (Dubai time)",
+        asOf: "Snapshot Sun Nov 15, 3:38 AM",
         weekUsedPct: 10,
-        resets: "Resets Sun Nov 15 at 11:52 PM (Dubai time)",
+        resets: "resets Sun 11:52 PM (Dubai time)",
         shares: [
           { id: "donna",   label: "DONNA",   pct: 85 },
           { id: "mailman", label: "Mailman", pct: 10 },
@@ -1205,75 +581,43 @@
           { id: null,      label: "Other",   pct: 0, text: "<1%" }
         ]
       };
+      const USAGE_TOP = 4;
 
       const PEOPLE = [
-        { id: "zaid",     name: "Zaid",     fullName: "Zaid Hassan", role: "Owner",                  short: "Owner",      kind: "owner",   dept: "owner" },
-        { id: "donna",    name: "DONNA",    fullName: "DONNA",       role: "Manager / coordinator",  short: "Coordinator",kind: "manager", dept: "manager" },
-        { id: "milo",     name: "MILO",     fullName: "MILO",        role: "Software engineer",      short: "Engineer",   kind: "bot",     dept: "engineering" },
-        { id: "colin",    name: "COLIN",    fullName: "COLIN",       role: "Software engineer",      short: "Engineer",   kind: "bot",     dept: "engineering" },
-        { id: "alex",     name: "ALEX",     fullName: "ALEX",        role: "Designer",               short: "Designer",   kind: "bot",     dept: "design" },
-        { id: "audrey",   name: "AUDREY",   fullName: "AUDREY",      role: "Books auditor",          short: "Auditor",    kind: "bot",     dept: "audit" },
-        { id: "security", name: "Security", fullName: "Security",    role: "Security",               short: "Security",   kind: "bot",     dept: "compliance" },
-        { id: "legal",    name: "Legal",    fullName: "Legal",       role: "Legal research",         short: "Legal",      kind: "bot",     dept: "compliance" },
-        { id: "mailman",  name: "Mailman",  fullName: "Mailman",     role: "Email",                  short: "Email",      kind: "bot",     dept: "property" },
-        { id: "morgan",   name: "Morgan",   fullName: "Morgan",      role: "Mortgage & lenders",     short: "Mortgages",  kind: "bot",     dept: "property" },
-        { id: "research", name: "Research", fullName: "Research",    role: "Dashboard research",     short: "Research",   kind: "bot",     dept: "property" }
+        { id: "zaid",     name: "Zaid",     role: "Owner",                 kind: "owner" },
+        { id: "donna",    name: "DONNA",    role: "Manager / coordinator", kind: "bot" },
+        { id: "milo",     name: "MILO",     role: "Software engineer",     kind: "bot" },
+        { id: "colin",    name: "COLIN",    role: "Software engineer",     kind: "bot" },
+        { id: "alex",     name: "ALEX",     role: "Designer",              kind: "bot" },
+        { id: "audrey",   name: "AUDREY",   role: "Books auditor",         kind: "bot" },
+        { id: "security", name: "Security", role: "Security",              kind: "bot" },
+        { id: "legal",    name: "Legal",    role: "Legal research",        kind: "bot" },
+        { id: "mailman",  name: "Mailman",  role: "Email",                 kind: "bot" },
+        { id: "morgan",   name: "Morgan",   role: "Mortgage & lenders",    kind: "bot" },
+        { id: "research", name: "Research", role: "Dashboard research",    kind: "bot" }
       ];
-
-      const DEPTS = [
-        { id: "owner",       title: "Owner's office",           cls: "owner" },
-        { id: "manager",     title: "Management",               cls: "manager" },
-        { id: "engineering", title: "Engineering",              cls: "engineering" },
-        { id: "design",      title: "Design",                   cls: "design" },
-        { id: "audit",       title: "Audit",                    cls: "audit" },
-        { id: "compliance",  title: "Compliance",               cls: "compliance" },
-        { id: "property",    title: "Property & communications", cls: "property" }
-      ];
-
-      const BOTS = PEOPLE.filter((p) => p.kind !== "owner");
-      const NAMES = Object.fromEntries(PEOPLE.map((p) => [p.id, p.name]));
+      const BOTS = PEOPLE.filter((p) => p.kind === "bot");
       const BY_ID = Object.fromEntries(PEOPLE.map((p) => [p.id, p]));
+      const NAMES = Object.fromEntries(PEOPLE.map((p) => [p.id, p.name]));
+      const FILLER = /^\s*(standing by|idle|none|—|-)?\s*$/i;
 
-      const EDGES = [
-        ["donna", "milo"], ["donna", "colin"], ["donna", "alex"], ["donna", "audrey"],
-        ["donna", "security"], ["donna", "legal"], ["donna", "mailman"],
-        ["donna", "morgan"], ["donna", "research"],
-        ["milo", "colin"], ["milo", "alex"], ["colin", "audrey"], ["alex", "audrey"],
-        ["security", "legal"], ["mailman", "morgan"]
-      ];
-
-      const TASKS = {
-        donna: ["Coordinating the morning brief", "Assigning a review to MILO", "Waiting on approvals", "Checking in with AUDREY", "Routing a research question"],
-        milo: ["Writing tests for a new page", "Reviewing COLIN's latest diff", "Fixing a compact-file comment", "Building a local connect flow", "Standing by for the next ticket"],
-        colin: ["Integrating a handoff from MILO", "Smoothing an edge case", "Preparing a patch for review", "Checking a regression", "Waiting on design notes"],
-        alex: ["Reviewing typography on reports", "Checking spacing and hierarchy", "Marking a layout pass for MILO", "Comparing two layout options", "Waiting on copy for a header"],
-        audrey: ["Auditing category mappings", "Reviewing a books discrepancy", "Checking a synthetic example", "Drafting a finding note", "Waiting on a clarification"],
-        security: ["Reviewing an access path", "Checking session handling", "Scanning a recent change", "Writing a short risk note", "Standing by"],
-        legal: ["Reviewing disclosure language", "Checking a terms update", "Researching a retention question", "Drafting a short memo", "Waiting on a source document"],
-        mailman: ["Triaging the inbox", "Drafting a reply", "Flagging a bill that is due", "Summarizing a thread", "Waiting for new mail"],
-        morgan: ["Checking a lender portal", "Reviewing a mortgage status", "Noting a payment date", "Preparing a short update", "Standing by"],
-        research: ["Comparing plan features", "Gathering product limits", "Summarizing a help page", "Checking a documentation change", "Waiting on the next brief"]
-      };
-
-      const HANDOFF_LABELS = ["task brief", "status update", "review request", "question", "file note", "follow-up"];
-
-      const sim = { bots: {}, messages: [], pendingHandoffs: [] };
       let snapshot = null;
       let openId = null;
-      let seatEls = {};
+      const cards = {};
       const particles = [];
       const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-      function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
-
-      function usageShare(id) {
-        const row = USAGE.shares.find((u) => u.id === id);
-        return row ? row.pct : null;
+      function el(tag, cls, text) {
+        const n = document.createElement(tag);
+        if (cls) n.className = cls;
+        if (text != null) n.textContent = text;
+        return n;
       }
 
       function relTime(iso) {
-        if (!iso) return "—";
-        const ms = Date.now() - new Date(iso).getTime();
+        const t = iso ? new Date(iso).getTime() : NaN;
+        if (!isFinite(t)) return "";
+        const ms = Date.now() - t;
         if (ms < 8000) return "just now";
         if (ms < 60000) return Math.round(ms / 1000) + "s ago";
         if (ms < 3600000) return Math.round(ms / 60000) + "m ago";
@@ -1282,8 +626,9 @@
       }
 
       function durSince(iso) {
-        if (!iso) return "—";
-        const ms = Math.max(0, Date.now() - new Date(iso).getTime());
+        const t = iso ? new Date(iso).getTime() : NaN;
+        if (!isFinite(t)) return "";
+        const ms = Math.max(0, Date.now() - t);
         if (ms < 60000) return Math.max(1, Math.round(ms / 1000)) + "s";
         if (ms < 3600000) return Math.round(ms / 60000) + "m";
         if (ms < 86400000) {
@@ -1294,16 +639,12 @@
         return Math.round(ms / 86400000) + "d";
       }
 
-      function escapeAttr(s) {
-        return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
-      }
-
       function svgUse(id) {
-        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        svg.setAttribute("class", "face");
+        const ns = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(ns, "svg");
         svg.setAttribute("viewBox", "0 0 80 80");
         svg.setAttribute("aria-hidden", "true");
-        const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+        const use = document.createElementNS(ns, "use");
         use.setAttribute("href", "#avatar-" + id);
         use.setAttributeNS("http://www.w3.org/1999/xlink", "href", "#avatar-" + id);
         svg.appendChild(use);
@@ -1311,13 +652,12 @@
       }
 
       function mountPortrait(container, person, live) {
-        const url = (live && live.avatar) || person.avatar || "";
+        const url = (live && live.avatar) || "";
         if (container.dataset.avatarKey === url && container.childNodes.length) return;
         container.dataset.avatarKey = url;
         container.innerHTML = "";
         if (url) {
           const img = document.createElement("img");
-          img.className = "face-img";
           img.alt = "";
           img.src = url;
           img.addEventListener("error", function () {
@@ -1330,458 +670,194 @@
         }
       }
 
-      function sparkSVG(values, w, h, color) {
+      function sparkSVG(values, w, h) {
         const ns = "http://www.w3.org/2000/svg";
         const svg = document.createElementNS(ns, "svg");
-        svg.setAttribute("class", "spark");
         svg.setAttribute("viewBox", "0 0 " + w + " " + h);
-        svg.setAttribute("width", String(w));
-        svg.setAttribute("height", String(h));
+        svg.setAttribute("preserveAspectRatio", "none");
         svg.setAttribute("aria-hidden", "true");
         const data = (values && values.length ? values : [0, 0]).slice();
         const max = Math.max(1, ...data);
         const step = data.length > 1 ? (w - 2) / (data.length - 1) : w;
-        const pts = data.map((v, i) => {
-          const x = 1 + i * step;
-          const y = h - 1 - (v / max) * (h - 4);
-          return x.toFixed(1) + "," + y.toFixed(1);
-        }).join(" ");
+        const pts = data.map((v, i) => (1 + i * step).toFixed(1) + "," + (h - 2 - (v / max) * (h - 6)).toFixed(1)).join(" ");
         const poly = document.createElementNS(ns, "polyline");
         poly.setAttribute("fill", "none");
-        poly.setAttribute("stroke", color || "rgba(143,176,255,0.9)");
-        poly.setAttribute("stroke-width", "1.4");
+        poly.setAttribute("stroke", "rgba(226,184,110,0.95)");
+        poly.setAttribute("stroke-width", "1.6");
         poly.setAttribute("stroke-linejoin", "round");
-        poly.setAttribute("stroke-linecap", "round");
         poly.setAttribute("points", pts);
         svg.appendChild(poly);
         return svg;
       }
 
-      function lastActivity(bot) {
-        const items = bot.activity || [];
-        return items.length ? items[0] : null;
-      }
-
-      function handoffText(h) {
-        if (!h || !h.with) return "No handoff yet";
-        const arrow = h.direction === "from" ? "←" : "→";
-        const name = NAMES[h.with] || h.with;
-        const label = h.label ? " · " + h.label : "";
-        return arrow + " " + name + label;
-      }
-
-      function msgChip(m) {
-        const sent = (m && m.sent) || 0;
-        const recv = (m && m.received) || 0;
-        return { label: "msg", value: sent + "↑ " + recv + "↓", title: sent + " sent, " + recv + " received today" };
-      }
-
-      function initSim() {
-        const now = Date.now();
-        const seed = {
-          donna: "busy", milo: "busy", colin: "idle", alex: "busy", audrey: "idle",
-          security: "idle", legal: "idle", mailman: "busy", morgan: "idle", research: "error"
-        };
-        const start = {
-          donna:    { done: 11, open: 4, sent: 28, recv: 31, stateMin: 22, upH: 11.2, hist: [1,0,2,4,6,8,9,11,10,8,7,9] },
-          milo:     { done: 6,  open: 2, sent: 9,  recv: 7,  stateMin: 40, upH: 9.4,  hist: [0,0,1,2,3,4,5,6,4,3,5,4] },
-          colin:    { done: 4,  open: 1, sent: 6,  recv: 8,  stateMin: 72, upH: 9.1,  hist: [0,1,0,2,2,3,4,3,4,2,2,1] },
-          alex:     { done: 5,  open: 2, sent: 7,  recv: 6,  stateMin: 15, upH: 8.6,  hist: [0,0,1,1,3,4,5,4,5,3,4,3] },
-          audrey:   { done: 3,  open: 1, sent: 4,  recv: 5,  stateMin: 125,upH: 8.0,  hist: [0,0,0,1,2,2,3,2,2,1,1,1] },
-          security: { done: 2,  open: 0, sent: 3,  recv: 2,  stateMin: 180,upH: 7.5,  hist: [0,0,0,1,1,2,1,2,1,0,1,0] },
-          legal:    { done: 3,  open: 1, sent: 5,  recv: 6,  stateMin: 50, upH: 8.2,  hist: [0,0,1,1,2,3,3,2,3,2,1,2] },
-          mailman:  { done: 8,  open: 3, sent: 22, recv: 19, stateMin: 12, upH: 10.1, hist: [1,0,2,3,5,6,7,8,6,5,7,6] },
-          morgan:   { done: 2,  open: 1, sent: 3,  recv: 4,  stateMin: 240,upH: 6.8,  hist: [0,0,0,1,1,1,2,1,2,1,1,1] },
-          research: { done: 1,  open: 1, sent: 2,  recv: 3,  stateMin: 8,  upH: 7.0,  hist: [0,0,0,1,1,2,1,2,1,1,0,1] }
-        };
-
-        BOTS.forEach((b, i) => {
-          const status = seed[b.id] || "idle";
-          const s = start[b.id];
-          const task = status === "idle" ? "Standing by" : (status === "error" ? "Blocked — needs a look" : pick(TASKS[b.id]));
-          const activity = [];
-          if (status !== "idle") {
-            activity.push({
-              at: new Date(now - (40 + i * 25) * 1000).toISOString(),
-              text: status === "error" ? "Hit a snag and flagged it" : "Picked up: " + task
-            });
-          }
-          if (b.id !== "donna") {
-            activity.push({
-              at: new Date(now - (120 + i * 35) * 1000).toISOString(),
-              text: "Received a brief from DONNA"
-            });
-          } else {
-            activity.push({
-              at: new Date(now - 180000).toISOString(),
-              text: "Opened the morning board"
-            });
-          }
-          const lastFromDonna = b.id !== "donna";
-          const lastHandoff = lastFromDonna
-            ? { with: "donna", direction: "from", at: activity[activity.length - 1].at, label: "task brief" }
-            : { with: "milo", direction: "to", at: new Date(now - 180000).toISOString(), label: "task brief" };
-
-          const alerts = [];
-          let errorCount = 0;
-          if (status === "error") {
-            errorCount = 1;
-            alerts.push({ at: activity[0].at, text: "Hit a snag and flagged it" });
-          }
-
-          sim.bots[b.id] = {
-            status: status,
-            currentTask: task,
-            activity: activity,
-            tasksCompletedToday: s.done,
-            openTasks: s.open,
-            errorCount: errorCount,
-            alerts: alerts,
-            uptimeSince: new Date(now - s.upH * 3600000).toISOString(),
-            stateSince: new Date(now - s.stateMin * 60000).toISOString(),
-            msgsToday: { sent: s.sent, received: s.recv },
-            lastHandoff: lastHandoff,
-            activityHistory: s.hist.slice()
-          };
-        });
-
-        for (let i = 0; i < 5; i++) sim.messages.push({ at: now - (10 + i * 8) * 1000 });
-        sim.pendingHandoffs.push({ from: "donna", to: "milo", label: "task brief" });
-        sim.pendingHandoffs.push({ from: "milo", to: "colin", label: "review request" });
-        sim.pendingHandoffs.push({ from: "donna", to: "alex", label: "follow-up" });
-      }
-
-      function pushActivity(id, text) {
-        const bot = sim.bots[id];
-        bot.activity.unshift({ at: new Date().toISOString(), text: text });
-        if (bot.activity.length > 12) bot.activity.length = 12;
-        const hist = bot.activityHistory;
-        if (hist && hist.length) hist[hist.length - 1] += 1;
-      }
-
-      function setState(id, status, task) {
-        const bot = sim.bots[id];
-        if (bot.status !== status) bot.stateSince = new Date().toISOString();
-        bot.status = status;
-        if (task != null) bot.currentTask = task;
-      }
-
-      function connectedPartners(id) {
-        const out = [];
-        EDGES.forEach(([a, b]) => {
-          if (a === id) out.push(b);
-          else if (b === id) out.push(a);
-        });
-        return out;
-      }
-
-      function fireHandoff(from, to, label) {
-        const note = label || pick(HANDOFF_LABELS);
-        const at = new Date().toISOString();
-        sim.pendingHandoffs.push({ from: from, to: to, label: note });
-        sim.messages.push({ at: Date.now() });
-        const A = sim.bots[from];
-        const B = sim.bots[to];
-        A.msgsToday.sent += 1;
-        B.msgsToday.received += 1;
-        A.lastHandoff = { with: to, direction: "to", at: at, label: note };
-        B.lastHandoff = { with: from, direction: "from", at: at, label: note };
-        pushActivity(from, "Sent to " + NAMES[to] + ": " + note);
-        pushActivity(to, "Received from " + NAMES[from] + ": " + note);
-        if (B.status === "idle") {
-          setState(to, "busy", pick(TASKS[to]));
-        }
-      }
-
-      function simulateTick() {
-        const ids = BOTS.map((b) => b.id);
-        const roll = Math.random();
-
-        if (roll < 0.45) {
-          const from = Math.random() < 0.55 ? "donna" : pick(ids);
-          const partners = connectedPartners(from);
-          if (partners.length) {
-            const to = pick(partners);
-            if (to !== from) fireHandoff(from, to);
-          }
-        } else if (roll < 0.8) {
-          const id = pick(ids);
-          const bot = sim.bots[id];
-          if (bot.status === "error") {
-            setState(id, "busy", pick(TASKS[id]));
-            pushActivity(id, "Recovered and resumed work");
-          } else if (bot.status === "busy" && Math.random() < 0.4) {
-            bot.tasksCompletedToday += 1;
-            if (bot.openTasks > 0) bot.openTasks -= 1;
-            setState(id, "idle", "Standing by");
-            pushActivity(id, "Finished the current task");
-          } else {
-            bot.openTasks += 1;
-            setState(id, "busy", pick(TASKS[id]));
-            pushActivity(id, "Started: " + bot.currentTask);
-          }
-        } else if (roll < 0.9) {
-          const id = pick(ids.filter((x) => x !== "donna"));
-          if (sim.bots[id].status !== "error") {
-            setState(id, "error", "Blocked — needs a look");
-            sim.bots[id].errorCount += 1;
-            sim.bots[id].alerts.unshift({ at: new Date().toISOString(), text: "Hit a snag and flagged it" });
-            if (sim.bots[id].alerts.length > 5) sim.bots[id].alerts.length = 5;
-            pushActivity(id, "Hit a snag and flagged it");
-          }
-        }
-
-        const cutoff = Date.now() - 60000;
-        sim.messages = sim.messages.filter((m) => m.at >= cutoff);
-      }
-
-      function simulateFleetStatus() {
-        const now = Date.now();
-        return {
-          updatedAt: new Date(now).toISOString(),
-          messagesLastMinute: sim.messages.filter((m) => now - m.at < 60000).length,
-          bots: BOTS.map((meta) => {
-            const live = sim.bots[meta.id];
-            return {
-              id: meta.id,
-              name: meta.name,
-              role: meta.role,
-              status: live.status,
-              currentTask: live.currentTask,
-              activity: live.activity.slice(),
-              tasksCompletedToday: live.tasksCompletedToday,
-              openTasks: live.openTasks,
-              errorCount: live.errorCount,
-              alerts: live.alerts.slice(),
-              uptimeSince: live.uptimeSince,
-              stateSince: live.stateSince,
-              msgsToday: { sent: live.msgsToday.sent, received: live.msgsToday.received },
-              lastHandoff: live.lastHandoff ? Object.assign({}, live.lastHandoff) : null,
-              activityHistory: live.activityHistory.slice()
-            };
-          }),
-          handoffs: sim.pendingHandoffs.splice(0)
-        };
+      // Last activity time: newest activity entry, else when the bot entered its current state.
+      function lastActiveAt(bot) {
+        const a = (bot.activity || [])[0];
+        return (a && a.at) || bot.stateSince || "";
       }
 
       async function loadFleetStatus() {
-        if (USE_STATUS_JSON) {
-          const res = await fetch("status.json?t=" + Date.now(), { cache: "no-store" });
-          if (!res.ok) throw new Error("status.json " + res.status);
-          return res.json();
-        }
-        return simulateFleetStatus();
+        const res = await fetch("status.json?t=" + Date.now(), { cache: "no-store" });
+        if (!res.ok) throw new Error("status.json " + res.status);
+        return res.json();
       }
 
       function buildFloor() {
         const floor = document.getElementById("floor");
-        floor.innerHTML = "";
-        DEPTS.forEach((dept) => {
-          const bay = document.createElement("section");
-          bay.className = "bay " + dept.cls;
-          const h = document.createElement("h2");
-          h.innerHTML = "<i></i>" + dept.title;
-          bay.appendChild(h);
-          const seats = document.createElement("div");
-          seats.className = "seats";
-          PEOPLE.filter((p) => p.dept === dept.id).forEach((person) => {
-            seats.appendChild(buildSeat(person));
-          });
-          bay.appendChild(seats);
-          floor.appendChild(bay);
-        });
-        document.getElementById("floor-wrap").addEventListener("click", () => closePanel());
+        PEOPLE.forEach((p) => floor.appendChild(buildCard(p)));
+        document.addEventListener("click", () => closePanel());
       }
 
-      function buildSeat(person) {
+      function buildCard(person) {
         const isOwner = person.kind === "owner";
-        const el = document.createElement("article");
-        el.className = isOwner ? "office" : "cube";
-        el.dataset.id = person.id;
-        el.tabIndex = 0;
-        el.setAttribute("role", "button");
-        el.setAttribute("aria-label", person.name + ", " + person.role);
-        if (isOwner) {
-          el.innerHTML =
-            '<div class="top">' +
-              '<div class="portrait" data-port></div>' +
-              '<div class="iden">' +
-                '<div class="name-row"><h3></h3><span class="badge owner"><i></i>Owner</span></div>' +
-                '<p class="role"></p>' +
-                '<p class="note">The fleet reports here. Click for details.</p>' +
-              '</div>' +
-            '</div>';
-        } else {
-          el.innerHTML =
-            '<div class="top">' +
-              '<div class="portrait" data-port></div>' +
-              '<div class="iden">' +
-                '<div class="name-row"><h3></h3><span class="badge idle" data-badge><i></i><span>Idle</span></span><span class="err-pill" data-err>0</span></div>' +
-                '<p class="role"></p>' +
-                '<p class="task" data-task></p>' +
-              '</div>' +
-            '</div>' +
-            '<p class="last"><span class="k">Last</span><span class="txt" data-last></span><time data-last-at></time></p>' +
-            '<div class="chips" data-chips></div>' +
-            '<div class="foot"><p class="handoff" data-handoff></p><span data-spark></span><span class="demo-mark">demo</span></div>';
+        const card = el("article", "card glass" + (isOwner ? " owner" : ""));
+        card.dataset.id = person.id;
+        const top = el("div", "top");
+        const port = el("div", "portrait");
+        port.dataset.port = "";
+        const iden = el("div", "iden");
+        iden.appendChild(el("h3", null, person.name));
+        iden.appendChild(el("p", null, person.role));
+        top.appendChild(port);
+        top.appendChild(iden);
+        card.appendChild(top);
+        mountPortrait(port, person, null);
+        if (!isOwner) {
+          const pill = el("span", "pill idle");
+          pill.dataset.pill = "";
+          pill.appendChild(el("i"));
+          pill.appendChild(el("span", null, "idle"));
+          top.appendChild(pill);
+          const task = el("p", "task");
+          task.dataset.task = "";
+          card.appendChild(task);
+          const grid = el("dl", "grid");
+          [["done", "Done", "Tasks completed today"],
+           ["open", "Open", "Open tasks"],
+           ["msgs", "Msgs", "Messages today: sent ↑, received ↓"],
+           ["up", "Uptime", "Time since this bot started"],
+           ["active", "Active", "Last activity"]].forEach(([k, label, title]) => {
+            const d = el("div");
+            d.title = title;
+            d.appendChild(el("dt", null, label));
+            const dd = el("dd");
+            dd.dataset.k = k;
+            d.appendChild(dd);
+            grid.appendChild(d);
+          });
+          card.appendChild(grid);
+          const extra = el("div", "extra");
+          extra.dataset.extra = "";
+          card.appendChild(extra);
+          card.tabIndex = 0;
+          card.setAttribute("role", "button");
+          card.setAttribute("aria-label", person.name + ", " + person.role + ". Open details");
+          card.addEventListener("click", (e) => { e.stopPropagation(); openPanel(person.id); });
+          card.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPanel(person.id); }
+          });
         }
-        el.querySelector("h3").textContent = person.name;
-        el.querySelector(".role").textContent = person.role;
-        mountPortrait(el.querySelector("[data-port]"), person, null);
-        el.addEventListener("click", (e) => { e.stopPropagation(); openPanel(person.id); });
-        el.addEventListener("keydown", (e) => {
-          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPanel(person.id); }
-        });
-        seatEls[person.id] = el;
-        return el;
+        cards[person.id] = card;
+        return card;
       }
 
-      function fillChips(el, bot) {
-        const share = usageShare(bot.id);
-        const msgs = msgChip(bot.msgsToday);
-        const chips = [
-          { title: "Tasks completed today", value: String(bot.tasksCompletedToday || 0), label: "done" },
-          { title: "Open tasks in queue", value: String(bot.openTasks || 0), label: "queue" },
-          { title: msgs.title, value: msgs.value, label: msgs.label },
-          { title: "Share of this week's usage (snapshot)", value: share == null ? "None" : share + "%", label: share == null ? "" : "week", snap: true, none: share == null },
-          { title: "Time in current state", value: durSince(bot.stateSince), label: "in state" },
-          { title: "Uptime this session", value: durSince(bot.uptimeSince), label: "up" }
-        ];
-        const wrap = el.querySelector("[data-chips]");
-        wrap.innerHTML = "";
-        chips.forEach((c) => {
-          const span = document.createElement("span");
-          span.className = "chip" + (c.snap ? " snap" : "") + (c.none ? " none" : "");
-          span.title = c.title;
-          const b = document.createElement("b");
-          b.textContent = c.value;
-          span.appendChild(b);
-          if (c.label) span.appendChild(document.createTextNode(" " + c.label));
-          wrap.appendChild(span);
-        });
-        if ((bot.errorCount || 0) > 0) {
-          const warn = document.createElement("span");
-          warn.className = "chip warn";
-          warn.title = "Errors and alerts";
-          const b = document.createElement("b");
-          b.textContent = String(bot.errorCount);
-          warn.appendChild(b);
-          warn.appendChild(document.createTextNode(" alerts"));
-          wrap.appendChild(warn);
+      function setDD(card, k, v) {
+        const dd = card.querySelector('[data-k="' + k + '"]');
+        if (!dd) return;
+        dd.textContent = v;
+        dd.parentNode.hidden = v === "";
+      }
+
+      function fillCard(card, meta, bot) {
+        const status = ["idle", "busy", "error"].includes(bot.status) ? bot.status : "idle";
+        card.classList.remove("is-idle", "is-busy", "is-error");
+        card.classList.add("is-" + status);
+        card.classList.toggle("is-open", openId === meta.id);
+        const pill = card.querySelector("[data-pill]");
+        pill.className = "pill " + status;
+        pill.querySelector("span").textContent = status;
+
+        const task = bot.currentTask || "";
+        card.querySelector("[data-task]").textContent = FILLER.test(task) ? "" : task;
+
+        const m = bot.msgsToday || {};
+        setDD(card, "done", String(bot.tasksCompletedToday || 0));
+        setDD(card, "open", String(bot.openTasks || 0));
+        setDD(card, "msgs", (m.sent || 0) + "↑ " + (m.received || 0) + "↓");
+        setDD(card, "up", durSince(bot.uptimeSince));
+        setDD(card, "active", relTime(lastActiveAt(bot)));
+
+        const extra = card.querySelector("[data-extra]");
+        extra.innerHTML = "";
+        const errs = bot.errorCount || 0;
+        const alerts = bot.alerts || [];
+        if (errs > 0 || alerts.length) {
+          const p = el("p", "alert");
+          p.title = "Errors and alerts";
+          p.appendChild(el("b", "ico", "⚠ " + Math.max(errs, alerts.length)));
+          if (alerts[0] && alerts[0].text) p.appendChild(el("span", null, alerts[0].text));
+          if (alerts[0] && alerts[0].at) p.appendChild(el("em", null, relTime(alerts[0].at)));
+          extra.appendChild(p);
         }
+        const h = bot.lastHandoff;
+        if (h && h.with) {
+          const p = el("p");
+          p.title = "Last handoff";
+          p.appendChild(el("b", "ico", h.direction === "from" ? "⇠" : "⇢"));
+          p.appendChild(el("span", null, (h.direction === "from" ? "from " : "to ") + (NAMES[h.with] || h.with) + (h.label ? " · " + h.label : "")));
+          const t = relTime(h.at);
+          if (t) p.appendChild(el("em", null, t));
+          extra.appendChild(p);
+        }
+        mountPortrait(card.querySelector("[data-port]"), meta, bot);
       }
 
       function applySnapshot(data) {
         snapshot = data;
         const counts = { total: 0, busy: 0, idle: 0, error: 0 };
         const byId = {};
-        (data.bots || []).forEach((bot) => { byId[bot.id] = bot; });
-
+        (data.bots || []).forEach((b) => { byId[b.id] = b; });
         BOTS.forEach((meta) => {
           const bot = byId[meta.id];
-          const el = seatEls[meta.id];
-          if (!bot || !el) return;
+          if (!bot) return;
           counts.total += 1;
-          counts[bot.status] = (counts[bot.status] || 0) + 1;
-          el.classList.remove("is-idle", "is-busy", "is-error");
-          el.classList.add("is-" + bot.status);
-          el.classList.toggle("is-open", openId === bot.id);
-          const badge = el.querySelector("[data-badge]");
-          if (badge) {
-            badge.className = "badge " + bot.status;
-            badge.querySelector("span").textContent = bot.status;
-          }
-          const err = el.querySelector("[data-err]");
-          if (err) {
-            const n = bot.errorCount || 0;
-            err.textContent = String(n);
-            err.classList.toggle("show", n > 0);
-          }
-          const task = el.querySelector("[data-task]");
-          if (task) task.textContent = bot.currentTask || "Standing by";
-          const last = lastActivity(bot);
-          const lastTxt = el.querySelector("[data-last]");
-          const lastAt = el.querySelector("[data-last-at]");
-          if (lastTxt) lastTxt.textContent = last ? last.text : "No recent activity";
-          if (lastAt) {
-            lastAt.textContent = last ? relTime(last.at) : "";
-            lastAt.dateTime = last ? last.at : "";
-          }
-          fillChips(el, bot);
-          const ho = el.querySelector("[data-handoff]");
-          if (ho) {
-            ho.innerHTML = "";
-            const h = bot.lastHandoff;
-            if (!h || !h.with) {
-              ho.textContent = "No handoff yet";
-            } else {
-              ho.appendChild(document.createTextNode(handoffText(h) + " · "));
-              const t = document.createElement("em");
-              t.textContent = relTime(h.at);
-              ho.appendChild(t);
-            }
-          }
-          const sparkHold = el.querySelector("[data-spark]");
-          if (sparkHold) {
-            sparkHold.innerHTML = "";
-            const spark = sparkSVG(bot.activityHistory || [], 56, 16);
-            spark.setAttribute("title", "Activity over the last 12 hours");
-            sparkHold.appendChild(spark);
-          }
-          mountPortrait(el.querySelector("[data-port]"), meta, bot);
+          if (counts[bot.status] != null) counts[bot.status] += 1;
+          fillCard(cards[meta.id], meta, bot);
         });
-
-        const ownerEl = seatEls.zaid;
-        if (ownerEl) ownerEl.classList.toggle("is-open", openId === "zaid");
-
-        document.getElementById("c-total").textContent = String(counts.total);
-        document.getElementById("c-busy").textContent = String(counts.busy);
-        document.getElementById("c-idle").textContent = String(counts.idle);
-        document.getElementById("c-error").textContent = String(counts.error);
+        ["total", "busy", "idle", "error"].forEach((k) => {
+          document.getElementById("c-" + k).textContent = String(counts[k]);
+        });
         document.getElementById("c-msgs").textContent = String(data.messagesLastMinute || 0);
-
         (data.handoffs || []).forEach((h) => spawnParticle(h.from, h.to));
         if (openId) renderPanel(openId);
       }
 
       function seatCenter(id) {
-        const el = seatEls[id];
-        const wrap = document.getElementById("floor-wrap");
-        if (!el || !wrap) return null;
-        const portrait = el.querySelector(".portrait") || el;
-        const r = portrait.getBoundingClientRect();
-        const w = wrap.getBoundingClientRect();
-        return {
-          x: r.left + r.width / 2 - w.left + wrap.scrollLeft,
-          y: r.top + r.height / 2 - w.top + wrap.scrollTop
-        };
+        const card = cards[id];
+        const floor = document.getElementById("floor");
+        if (!card) return null;
+        const r = card.querySelector(".portrait").getBoundingClientRect();
+        const f = floor.getBoundingClientRect();
+        return { x: r.left + r.width / 2 - f.left, y: r.top + r.height / 2 - f.top };
       }
 
       function spawnParticle(from, to) {
         const a = seatCenter(from);
         const b = seatCenter(to);
         if (!a || !b || reduceMotion) return;
+        const ns = "http://www.w3.org/2000/svg";
         const layer = document.getElementById("handoff-layer");
-        const wrap = document.getElementById("floor-wrap");
-        layer.setAttribute("viewBox", "0 0 " + wrap.scrollWidth + " " + wrap.scrollHeight);
-        layer.setAttribute("width", String(wrap.scrollWidth));
-        layer.setAttribute("height", String(wrap.scrollHeight));
-        const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-        const glow = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        const g = document.createElementNS(ns, "g");
+        const glow = document.createElementNS(ns, "circle");
         glow.setAttribute("class", "particle-glow");
         glow.setAttribute("r", "7");
-        const core = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        const core = document.createElementNS(ns, "circle");
         core.setAttribute("class", "particle");
         core.setAttribute("r", "3.4");
         g.appendChild(glow);
         g.appendChild(core);
         layer.appendChild(g);
-        particles.push({
-          node: g, core: core, glow: glow,
-          ax: a.x, ay: a.y, bx: b.x, by: b.y,
-          start: performance.now(),
-          duration: 900 + Math.random() * 400
-        });
+        particles.push({ node: g, core: core, glow: glow, ax: a.x, ay: a.y, bx: b.x, by: b.y, start: performance.now(), duration: 900 + Math.random() * 400 });
       }
 
       function tickParticles(now) {
@@ -1790,237 +866,96 @@
           const t = (now - p.start) / p.duration;
           if (t >= 1) { p.node.remove(); particles.splice(i, 1); continue; }
           const u = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-          const x = p.ax + (p.bx - p.ax) * u;
-          const y = p.ay + (p.by - p.ay) * u;
-          p.core.setAttribute("cx", x.toFixed(2));
-          p.core.setAttribute("cy", y.toFixed(2));
-          p.glow.setAttribute("cx", x.toFixed(2));
-          p.glow.setAttribute("cy", y.toFixed(2));
-          const fade = t < 0.1 ? t / 0.1 : t > 0.85 ? (1 - t) / 0.15 : 1;
-          p.node.setAttribute("opacity", String(Math.max(0, fade)));
+          const x = (p.ax + (p.bx - p.ax) * u).toFixed(2);
+          const y = (p.ay + (p.by - p.ay) * u).toFixed(2);
+          p.core.setAttribute("cx", x); p.core.setAttribute("cy", y);
+          p.glow.setAttribute("cx", x); p.glow.setAttribute("cy", y);
+          p.node.setAttribute("opacity", String(t < 0.1 ? t / 0.1 : t > 0.85 ? (1 - t) / 0.15 : 1));
         }
-      }
-
-      function botFromSnap(id) {
-        return snapshot && snapshot.bots && snapshot.bots.find((b) => b.id === id);
       }
 
       function openPanel(id) {
         openId = id;
-        Object.keys(seatEls).forEach((k) => seatEls[k].classList.toggle("is-open", k === id));
+        Object.keys(cards).forEach((k) => cards[k].classList.toggle("is-open", k === id));
         renderPanel(id);
         const panel = document.getElementById("panel");
         panel.classList.add("open");
         panel.setAttribute("aria-hidden", "false");
-        document.body.classList.add("panel-open");
       }
 
       function closePanel() {
+        if (!openId) return;
         openId = null;
-        Object.keys(seatEls).forEach((k) => seatEls[k].classList.remove("is-open"));
+        Object.keys(cards).forEach((k) => cards[k].classList.remove("is-open"));
         const panel = document.getElementById("panel");
         panel.classList.remove("open");
-        panel.classList.remove("is-owner");
         panel.setAttribute("aria-hidden", "true");
-        document.body.classList.remove("panel-open");
       }
 
-      function metricEl(value, label, extra) {
-        const d = document.createElement("div");
-        d.className = "metric" + (extra ? " " + extra : "");
-        const b = document.createElement("b");
-        b.textContent = value;
-        const s = document.createElement("span");
-        s.textContent = label;
-        d.appendChild(b);
-        d.appendChild(s);
-        return d;
+      function timedList(items, cls) {
+        const ul = el("ul", "list" + (cls ? " " + cls : ""));
+        items.forEach((it) => {
+          const li = el("li");
+          const t = el("time", null, relTime(it.at));
+          t.dateTime = it.at || "";
+          li.appendChild(t);
+          li.appendChild(el("span", null, it.text || ""));
+          ul.appendChild(li);
+        });
+        return ul;
       }
 
-      function labeledBox(label, text) {
-        const frag = document.createDocumentFragment();
-        const l = document.createElement("span");
-        l.className = "block-label";
-        l.textContent = label;
-        const box = document.createElement("div");
-        box.className = "taskbox";
-        box.textContent = text;
-        frag.appendChild(l);
-        frag.appendChild(box);
-        return frag;
-      }
-
+      // The panel adds what the card does not show: the 12-hour trend, every alert, and the activity log.
       function renderPanel(id) {
         const meta = BY_ID[id];
-        const body = document.getElementById("p-body");
-        const panel = document.getElementById("panel");
-        if (!meta) return;
-        document.getElementById("p-name").textContent = meta.fullName || meta.name;
+        const bot = snapshot && (snapshot.bots || []).find((b) => b.id === id);
+        if (!meta || !bot) return;
+        document.getElementById("p-name").textContent = meta.name;
         document.getElementById("p-role").textContent = meta.role;
-        const avatar = document.getElementById("p-avatar");
-
-        if (meta.kind === "owner") {
-          panel.classList.add("is-owner");
-          avatar.dataset.status = "owner";
-          mountPortrait(avatar, meta, null);
-          body.innerHTML = "";
-          const flags = document.createElement("div");
-          flags.className = "panel-flags";
-          const badge = document.createElement("div");
-          badge.className = "badge owner";
-          badge.innerHTML = "<i></i><span>Owner</span>";
-          flags.appendChild(badge);
-          body.appendChild(flags);
-          body.appendChild(labeledBox("About", "The fleet reports to Zaid. This seat is the owner's office, not an agent, so it has no bot metrics or weekly usage share."));
-          return;
-        }
-
-        const bot = botFromSnap(id);
-        if (!bot) return;
-        panel.classList.remove("is-owner");
-        avatar.dataset.status = bot.status;
-        mountPortrait(avatar, meta, bot);
+        mountPortrait(document.getElementById("p-avatar"), meta, bot);
+        const body = document.getElementById("p-body");
         body.innerHTML = "";
-
-        const flags = document.createElement("div");
-        flags.className = "panel-flags";
-        const badge = document.createElement("div");
-        badge.className = "badge " + bot.status;
-        badge.innerHTML = "<i></i><span></span>";
-        badge.querySelector("span").textContent = bot.status;
-        flags.appendChild(badge);
-        if ((bot.errorCount || 0) > 0) {
-          const pill = document.createElement("span");
-          pill.className = "err-pill show";
-          pill.textContent = String(bot.errorCount);
-          flags.appendChild(pill);
-        }
-        const simNote = document.createElement("span");
-        simNote.className = "sim-note";
-        simNote.textContent = "Simulated figures";
-        flags.appendChild(simNote);
-        body.appendChild(flags);
-
-        const share = usageShare(id);
-        body.appendChild(labeledBox("Share of this week's usage", share == null ? "None this week" : share + "%  ·  from the usage snapshot, not the simulator"));
-        body.appendChild(labeledBox("Current task", bot.currentTask || "Standing by"));
-
-        const grid = document.createElement("div");
-        grid.className = "metrics";
-        grid.appendChild(metricEl(String(bot.tasksCompletedToday || 0), "Completed today"));
-        grid.appendChild(metricEl(String(bot.openTasks || 0), "Open tasks"));
-        const m = bot.msgsToday || {};
-        grid.appendChild(metricEl(String(m.sent || 0), "Messages sent today"));
-        grid.appendChild(metricEl(String(m.received || 0), "Messages received today"));
-        grid.appendChild(metricEl(durSince(bot.stateSince), "Time in this state"));
-        grid.appendChild(metricEl(durSince(bot.uptimeSince), "Uptime"));
-        grid.appendChild(metricEl(share == null ? "None" : share + "%", "Weekly usage", "snap"));
-        grid.appendChild(metricEl(String(bot.errorCount || 0), "Errors / alerts", (bot.errorCount || 0) > 0 ? "alert" : ""));
-        body.appendChild(grid);
-
-        const h = bot.lastHandoff;
-        const hText = !h || !h.with
-          ? "No handoff yet"
-          : handoffText(h) + "  ·  " + relTime(h.at);
-        body.appendChild(labeledBox("Last handoff", hText));
-
-        if (bot.alerts && bot.alerts.length) {
-          const lab = document.createElement("span");
-          lab.className = "block-label";
-          lab.textContent = "Alerts";
-          body.appendChild(lab);
-          const ul = document.createElement("ul");
-          ul.className = "alerts";
-          bot.alerts.forEach((a) => {
-            const li = document.createElement("li");
-            const t = document.createElement("time");
-            t.textContent = relTime(a.at);
-            t.dateTime = a.at || "";
-            const s = document.createElement("span");
-            s.textContent = a.text;
-            li.appendChild(t);
-            li.appendChild(s);
-            ul.appendChild(li);
-          });
-          body.appendChild(ul);
-        }
-
-        const slab = document.createElement("span");
-        slab.className = "block-label";
-        slab.textContent = "Activity, last 12 hours";
-        body.appendChild(slab);
-        const spark = sparkSVG(bot.activityHistory || [], 360, 48);
+        body.appendChild(el("span", "block-label", "Last 12 hours"));
+        const spark = sparkSVG(bot.activityHistory || [], 340, 48);
         spark.id = "p-spark";
-        spark.removeAttribute("class");
         body.appendChild(spark);
-
-        const alab = document.createElement("span");
-        alab.className = "block-label";
-        alab.textContent = "Recent activity";
-        body.appendChild(alab);
-        const list = document.createElement("ul");
-        list.className = "activity";
-        const items = bot.activity || [];
-        if (!items.length) {
-          const empty = document.createElement("div");
-          empty.className = "empty";
-          empty.textContent = "No recent activity.";
-          body.appendChild(empty);
-        } else {
-          items.forEach((item) => {
-            const li = document.createElement("li");
-            const t = document.createElement("time");
-            t.textContent = relTime(item.at);
-            t.dateTime = item.at;
-            const s = document.createElement("span");
-            s.textContent = item.text;
-            li.appendChild(t);
-            li.appendChild(s);
-            list.appendChild(li);
-          });
-          body.appendChild(list);
+        const alerts = (bot.alerts || []).filter((a) => a && a.text);
+        if (alerts.length) {
+          body.appendChild(el("span", "block-label", "Alerts"));
+          body.appendChild(timedList(alerts, "alerts"));
+        }
+        const acts = (bot.activity || []).filter((a) => a && a.text);
+        if (acts.length) {
+          body.appendChild(el("span", "block-label", "Activity log"));
+          body.appendChild(timedList(acts));
         }
       }
 
       function renderUsage() {
-        document.getElementById("c-usage").textContent = USAGE.weekUsedPct + "%";
-        document.getElementById("c-ubar").style.width = USAGE.weekUsedPct + "%";
         document.getElementById("u-used").textContent = USAGE.weekUsedPct + "%";
-        document.getElementById("u-bigbar").style.width = USAGE.weekUsedPct + "%";
-        document.getElementById("u-asof").textContent = USAGE.asOf;
-        document.getElementById("u-reset").textContent = USAGE.resets;
-        const ul = document.getElementById("u-list");
-        ul.innerHTML = "";
-        USAGE.shares.forEach((u) => {
-          const li = document.createElement("li");
-          const a = document.createElement("span"); a.textContent = u.label;
-          const bar = document.createElement("span"); bar.className = "bar";
-          const fill = document.createElement("i"); fill.style.width = Math.max(u.pct, 1) + "%"; bar.appendChild(fill);
-          const v = document.createElement("span"); v.textContent = u.text || (u.pct + "%");
-          li.appendChild(a); li.appendChild(bar); li.appendChild(v); ul.appendChild(li);
+        document.getElementById("u-bar").style.width = USAGE.weekUsedPct + "%";
+        const ol = document.getElementById("u-list");
+        ol.innerHTML = "";
+        USAGE.shares.filter((u) => u.id).slice(0, USAGE_TOP).forEach((u) => {
+          const li = el("li", null, u.label);
+          li.appendChild(el("b", null, u.text || u.pct + "%"));
+          ol.appendChild(li);
         });
+        document.getElementById("u-meta").textContent = USAGE.asOf + " · " + USAGE.resets;
       }
 
       function updateClock() {
         const now = new Date();
-        const time = new Intl.DateTimeFormat(undefined, {
-          weekday: "short", day: "numeric", month: "short",
-          hour: "numeric", minute: "2-digit", second: "2-digit"
+        document.getElementById("clock").textContent = new Intl.DateTimeFormat(undefined, {
+          weekday: "short", hour: "numeric", minute: "2-digit", second: "2-digit"
         }).format(now);
-        const tz = new Intl.DateTimeFormat(undefined, { timeZoneName: "short" })
-          .formatToParts(now)
-          .find((p) => p.type === "timeZoneName");
-        document.getElementById("clock").textContent = time;
-        document.getElementById("tz").textContent = tz ? tz.value : "Local time";
+        const tz = new Intl.DateTimeFormat(undefined, { timeZoneName: "short" }).formatToParts(now).find((p) => p.type === "timeZoneName");
+        document.getElementById("tz").textContent = tz ? tz.value : "";
       }
 
-      let firstRefresh = true;
       async function refresh() {
-        if (!USE_STATUS_JSON && !firstRefresh) simulateTick();
-        firstRefresh = false;
         try {
-          const data = await loadFleetStatus();
-          applySnapshot(data);
+          applySnapshot(await loadFleetStatus());
         } catch (err) {
           console.error("Failed to load fleet status", err);
         }
@@ -2031,20 +966,12 @@
         requestAnimationFrame(loop);
       }
 
-      document.body.classList.toggle("is-demo", !USE_STATUS_JSON);
       document.body.classList.toggle("is-live", USE_STATUS_JSON);
-
-      document.getElementById("p-close").addEventListener("click", (e) => {
-        e.stopPropagation();
-        closePanel();
-      });
+      document.getElementById("p-close").addEventListener("click", (e) => { e.stopPropagation(); closePanel(); });
       document.getElementById("panel").addEventListener("click", (e) => e.stopPropagation());
-      document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") closePanel();
-      });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePanel(); });
 
       renderUsage();
-      initSim();
       buildFloor();
       updateClock();
       setInterval(updateClock, 1000);
@@ -2053,7 +980,7 @@
       requestAnimationFrame(loop);
 
       const preset = new URLSearchParams(location.search).get("panel");
-      if (preset && BY_ID[preset]) setTimeout(() => openPanel(preset), 80);
+      if (preset && BY_ID[preset] && BY_ID[preset].kind === "bot") setTimeout(() => openPanel(preset), 300);
     })();
   </script>
 </body>
