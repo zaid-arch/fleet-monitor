@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-15T18:55:05.000Z",
+  "updatedAt": "2026-11-15T18:55:31.000Z",
   "messagesLastMinute": 0,
   "bots": [
     {
@@ -251,15 +251,15 @@
       "id": "legal",
       "name": "Legal",
       "role": "Legal research",
-      "status": "busy",
-      "currentTask": "Writing a legal report",
+      "status": "idle",
+      "currentTask": "Standing by",
       "avatar": "",
-      "tasksCompletedToday": 0,
+      "tasksCompletedToday": 1,
       "openTasks": 0,
       "errorCount": 0,
       "alerts": [],
       "uptimeSince": "2026-11-15T16:20:00.000Z",
-      "stateSince": "2026-11-15T18:52:17.000Z",
+      "stateSince": "2026-11-15T18:55:31.000Z",
       "msgsToday": {
         "sent": 0,
         "received": 0
@@ -279,6 +279,10 @@
         0
       ],
       "activity": [
+        {
+          "at": "2026-11-15T18:55:31.000Z",
+          "text": "Finished a task"
+        },
         {
           "at": "2026-11-15T18:52:17.000Z",
           "text": "Updated current task"
