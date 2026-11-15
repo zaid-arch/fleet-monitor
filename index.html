@@ -741,7 +741,27 @@
         return (a && a.at) || bot.stateSince || "";
       }
 
+      // Fast path: read status.json straight from the GitHub API (fresh within ~1s of a push,
+      // skipping the ~30s Pages rebuild). ETag requests that return 304 don't use the API rate limit.
+      // If the API fails or is rate-limited, fall back to the Pages copy for 5 minutes.
+      const API_URL = "https://api.github.com/repos/zaid-arch/fleet-monitor/contents/status.json";
+      let apiEtag = "", apiData = null, apiPausedUntil = 0;
+      async function loadFromApi() {
+        const headers = { Accept: "application/vnd.github.raw" };
+        if (apiEtag && apiData) headers["If-None-Match"] = apiEtag;
+        const res = await fetch(API_URL, { cache: "no-store", headers });
+        if (res.status === 304 && apiData) return apiData;
+        if (!res.ok) throw new Error("api " + res.status);
+        const data = await res.json();
+        apiEtag = res.headers.get("ETag") || "";
+        apiData = data;
+        return data;
+      }
       async function loadFleetStatus() {
+        if (Date.now() >= apiPausedUntil) {
+          try { return await loadFromApi(); }
+          catch (e) { apiPausedUntil = Date.now() + 5 * 60 * 1000; }
+        }
         const res = await fetch("status.json?t=" + Date.now(), { cache: "no-store" });
         if (!res.ok) throw new Error("status.json " + res.status);
         return res.json();
