@@ -53,7 +53,7 @@
         }
       ],
       "handoffs": [
-        { "from": "donna", "to": "milo", "label": "Task brief" }
+        { "from": "donna", "to": "milo", "at": "2026-11-15T14:51:00.000Z" }
       ]
     }
 
@@ -62,7 +62,14 @@
     the built-in SVG portrait is used. The URL must not be required for
     the page to work offline.
     activityHistory is 12 numbers, oldest first, one bucket per hour.
-    handoffs are consumed once, to spawn a travelling particle.
+    handoffs are {from, to, at}. A new entry — one whose at is newer
+    than the last one already shown, or, on first load, one from the
+    last 60 seconds — draws a short fading arrow from one desk's
+    monitor to the other's.
+    talkingTo is an optional bot id on a bot object (for example
+    "talkingTo": "milo"). When it is set or changes, the same arrow
+    is drawn to that bot's desk. A currentTask such as "talking to
+    MILO" or "handing off to colin" is treated the same way.
     activity timestamps should be ISO-8601.
     Bot ids used in this file: donna, milo, colin, alex, audrey,
     security, legal, mailman, morgan, research.
@@ -169,6 +176,24 @@
     #floor { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; position: relative; max-width: 1240px; margin: 0 auto; }
     #handoff-layer { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
     .particle { fill: var(--gold); } .particle-glow { fill: rgba(226, 184, 110, 0.3); }
+    #talk-layer {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 3; overflow: visible;
+    }
+    #talk-layer .talk {
+      fill: none; stroke: var(--gold); stroke-width: 2.2;
+      stroke-linecap: round; stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+      filter: drop-shadow(0 0 3px rgba(226, 184, 110, 0.85));
+    }
+    #talk-layer .talk-head { fill: var(--gold); stroke: none; }
+    #talk-layer .talk-g { animation: talk-fade 3s ease forwards; }
+    @keyframes talk-fade {
+      0% { opacity: 0; }
+      12% { opacity: 1; }
+      65% { opacity: 1; }
+      100% { opacity: 0; }
+    }
     .card {
       position: relative; border-radius: 14px; padding: 20px 22px; cursor: pointer;
       border-left: 3px solid var(--idle); transition: border-color .2s, transform .15s;
@@ -240,7 +265,10 @@
       #floor { grid-template-columns: 1fr; }
       .usage .meta { margin-left: 0; }
     }
-    @media (prefers-reduced-motion: reduce) { .live i { animation: none; } }
+    @media (prefers-reduced-motion: reduce) {
+      .live i { animation: none; }
+      #talk-layer .talk-g { animation-duration: 0.8s; }
+    }
   </style>
 </head>
 <body class="is-live">
@@ -544,6 +572,7 @@
   <main>
     <section class="scene" id="scene" aria-label="Office floor with live status on each desk">
       <img src="office.jpg" alt="Bright open-plan office: DONNA at the corner desk, the other bots at their team desks" width="1280" height="720" />
+      <svg id="talk-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg>
     </section>
     <section class="usage glass" id="usage" aria-label="Weekly usage snapshot" hidden>
       <span class="lead">Week used <b id="u-used"></b></span>
@@ -610,8 +639,11 @@
       let snapshot = null;
       let openId = null;
       const cards = {};
-      const particles = [];
       const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      let handoffsPrimed = false;
+      let lastHandoffAt = 0;
+      const seenHandoffKeys = Object.create(null);
+      const lastTalk = Object.create(null);
 
       function el(tag, cls, text) {
         const n = document.createElement(tag);
@@ -878,50 +910,94 @@
           document.getElementById("c-" + k).textContent = String(counts[k]);
         });
         document.getElementById("c-msgs").textContent = String(data.messagesLastMinute || 0);
-        (data.handoffs || []).forEach((h) => spawnParticle(h.from, h.to));
+        processTalk(data);
         if (openId) renderPanel(openId);
       }
 
-      function seatCenter(id) {
-        const card = cards[id];
-        const floor = document.getElementById("floor");
-        if (!card) return null;
-        const r = card.querySelector(".portrait").getBoundingClientRect();
-        const f = floor.getBoundingClientRect();
-        return { x: r.left + r.width / 2 - f.left, y: r.top + r.height / 2 - f.top };
+      function talkingTarget(bot) {
+        if (!bot) return null;
+        const direct = (bot.talkingTo || "").toLowerCase();
+        if (SCENE[direct] && direct !== bot.id) return direct;
+        const text = String(bot.currentTask || "");
+        const m = text.match(/\b(?:talking to|handing off to|handed off to|handoff to)\s+([A-Za-z]+)\b/i);
+        if (!m) return null;
+        const raw = m[1].toLowerCase();
+        if (SCENE[raw] && raw !== bot.id) return raw;
+        const hit = PEOPLE.find((p) => p.name.toLowerCase() === raw || p.id === raw);
+        return hit && hit.id !== bot.id ? hit.id : null;
       }
 
-      function spawnParticle(from, to) {
-        const a = seatCenter(from);
-        const b = seatCenter(to);
-        if (!a || !b || reduceMotion) return;
+      function drawTalkArc(fromId, toId) {
+        const a = SCENE[fromId];
+        const b = SCENE[toId];
+        if (!a || !b || fromId === toId) return;
+        const layer = document.getElementById("talk-layer");
+        if (!layer) return;
         const ns = "http://www.w3.org/2000/svg";
-        const layer = document.getElementById("handoff-layer");
+        const x1 = a.mx, y1 = a.my, x2 = b.mx, y2 = b.my;
+        const dx = x2 - x1, dy = y2 - y1;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const bulge = Math.min(12, Math.max(4, len * 0.18));
+        const cx = (x1 + x2) / 2 - (dy / len) * bulge;
+        const cy = (y1 + y2) / 2 + (dx / len) * bulge;
+        // Aspect of the 1280x720 scene, so the arrowhead is not stretched.
+        const ax = 1280 / 100, ay = 720 / 100;
+        const tdx = (x2 - cx) * ax, tdy = (y2 - cy) * ay;
+        const tlen = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
+        const ux = tdx / tlen, uy = tdy / tlen;
+        const tipX = x2, tipY = y2;
+        const back = 2.1;
+        const half = 1.15;
+        const bx = tipX - (ux * back) / ax;
+        const by = tipY - (uy * back) / ay;
+        const px = (-uy * half) / ax, py = (ux * half) / ay;
         const g = document.createElementNS(ns, "g");
-        const glow = document.createElementNS(ns, "circle");
-        glow.setAttribute("class", "particle-glow");
-        glow.setAttribute("r", "7");
-        const core = document.createElementNS(ns, "circle");
-        core.setAttribute("class", "particle");
-        core.setAttribute("r", "3.4");
-        g.appendChild(glow);
-        g.appendChild(core);
+        g.setAttribute("class", "talk-g");
+        g.setAttribute("data-from", fromId);
+        g.setAttribute("data-to", toId);
+        const path = document.createElementNS(ns, "path");
+        path.setAttribute("class", "talk");
+        const endX = tipX - (ux * 1.15) / ax;
+        const endY = tipY - (uy * 1.15) / ay;
+        path.setAttribute("d", "M " + x1.toFixed(2) + " " + y1.toFixed(2) + " Q " + cx.toFixed(2) + " " + cy.toFixed(2) + " " + endX.toFixed(2) + " " + endY.toFixed(2));
+        const head = document.createElementNS(ns, "polygon");
+        head.setAttribute("class", "talk-head");
+        head.setAttribute("points", [
+          tipX.toFixed(2) + "," + tipY.toFixed(2),
+          (bx + px).toFixed(2) + "," + (by + py).toFixed(2),
+          (bx - px).toFixed(2) + "," + (by - py).toFixed(2)
+        ].join(" "));
+        g.appendChild(path);
+        g.appendChild(head);
         layer.appendChild(g);
-        particles.push({ node: g, core: core, glow: glow, ax: a.x, ay: a.y, bx: b.x, by: b.y, start: performance.now(), duration: 900 + Math.random() * 400 });
+        const life = reduceMotion ? 900 : 3100;
+        setTimeout(() => { if (g.parentNode) g.parentNode.removeChild(g); }, life);
       }
 
-      function tickParticles(now) {
-        for (let i = particles.length - 1; i >= 0; i--) {
-          const p = particles[i];
-          const t = (now - p.start) / p.duration;
-          if (t >= 1) { p.node.remove(); particles.splice(i, 1); continue; }
-          const u = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-          const x = (p.ax + (p.bx - p.ax) * u).toFixed(2);
-          const y = (p.ay + (p.by - p.ay) * u).toFixed(2);
-          p.core.setAttribute("cx", x); p.core.setAttribute("cy", y);
-          p.glow.setAttribute("cx", x); p.glow.setAttribute("cy", y);
-          p.node.setAttribute("opacity", String(t < 0.1 ? t / 0.1 : t > 0.85 ? (1 - t) / 0.15 : 1));
-        }
+      function processTalk(data) {
+        const now = Date.now();
+        let maxAt = lastHandoffAt;
+        (data.handoffs || []).forEach((h) => {
+          if (!h || !SCENE[h.from] || !SCENE[h.to] || !h.at) return;
+          const t = new Date(h.at).getTime();
+          if (!isFinite(t)) return;
+          if (t > maxAt) maxAt = t;
+          const key = h.from + ">" + h.to + "@" + h.at;
+          if (seenHandoffKeys[key]) return;
+          const isNew = handoffsPrimed ? t > lastHandoffAt : (now - t <= 60000);
+          if (isNew) {
+            seenHandoffKeys[key] = true;
+            drawTalkArc(h.from, h.to);
+          }
+        });
+        lastHandoffAt = maxAt;
+        handoffsPrimed = true;
+        (data.bots || []).forEach((bot) => {
+          const to = talkingTarget(bot);
+          const prev = lastTalk[bot.id] || null;
+          if (to && to !== prev) drawTalkArc(bot.id, to);
+          lastTalk[bot.id] = to || null;
+        });
       }
 
       function openPanel(id) {
@@ -1044,11 +1120,6 @@
         }
       }
 
-      function loop(now) {
-        tickParticles(now);
-        requestAnimationFrame(loop);
-      }
-
       document.body.classList.toggle("is-live", USE_STATUS_JSON);
       document.getElementById("p-close").addEventListener("click", (e) => { e.stopPropagation(); closePanel(); });
       document.getElementById("panel").addEventListener("click", (e) => e.stopPropagation());
@@ -1060,7 +1131,6 @@
       setInterval(updateClock, 1000);
       refresh();
       setInterval(refresh, 3000);
-      requestAnimationFrame(loop);
 
       const preset = new URLSearchParams(location.search).get("panel");
       if (preset && BY_ID[preset]) setTimeout(() => openPanel(preset), 300);
