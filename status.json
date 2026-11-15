@@ -335,21 +335,21 @@
   ],
   "handoffs": [],
   "usage": {
-    "weekUsedPct": 24.9,
-    "snapshotAt": "2026-11-15T16:46:00.000Z",
+    "weekUsedPct": 29.1,
+    "snapshotAt": "2026-11-15T18:05:17.000Z",
     "resetsAt": "2026-11-15T19:52:00.000Z",
     "shares": [
       {
         "id": "donna",
-        "pct": 81
+        "pct": 78
       },
       {
         "id": "alex",
-        "pct": 12
+        "pct": 16
       },
       {
         "id": "mailman",
-        "pct": 5
+        "pct": 4
       },
       {
         "id": "legal",
