@@ -125,6 +125,12 @@
     }
     body.is-live .live { display: inline-flex; }
     .live i { width: 7px; height: 7px; border-radius: 50%; background: var(--idle); box-shadow: 0 0 8px var(--idle); animation: pulse 2s infinite; }
+    .next-update {
+      display: none; color: var(--muted);
+      font: 400 13px var(--sans); letter-spacing: 0; text-transform: none;
+      white-space: nowrap;
+    }
+    body.is-live .next-update { display: inline; }
     @keyframes pulse { 50% { opacity: 0.35; } }
     .counts { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-left: auto; font-size: 15px; color: var(--muted); }
     .counts span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
@@ -558,6 +564,7 @@
     <div class="brand">
       <strong>Fleet Monitor</strong>
       <em class="live"><i></i>Live</em>
+      <span id="next-update" class="next-update"></span>
     </div>
     <div class="counts" aria-label="Fleet counts">
       <span><b id="c-total">0</b> bots</span>
@@ -1112,7 +1119,23 @@
         document.getElementById("tz").textContent = tz ? tz.value : "";
       }
 
+      const POLL_MS = 3000;
+      let nextPollAt = 0;
+      let pollTimer = 0;
+
+      function updateCountdown() {
+        const node = document.getElementById("next-update");
+        if (!node || !nextPollAt) return;
+        const ms = nextPollAt - Date.now();
+        const sec = ms <= 0 ? 1 : Math.max(1, Math.ceil(ms / 1000));
+        node.textContent = "next update in " + sec + "s";
+      }
+
       async function refresh() {
+        nextPollAt = Date.now() + POLL_MS;
+        if (pollTimer) clearTimeout(pollTimer);
+        pollTimer = setTimeout(refresh, POLL_MS);
+        updateCountdown();
         try {
           applySnapshot(await loadFleetStatus());
         } catch (err) {
@@ -1129,8 +1152,8 @@
       buildFloor();
       updateClock();
       setInterval(updateClock, 1000);
+      setInterval(updateCountdown, 200);
       refresh();
-      setInterval(refresh, 3000);
 
       const preset = new URLSearchParams(location.search).get("panel");
       if (preset && BY_ID[preset]) setTimeout(() => openPanel(preset), 300);
