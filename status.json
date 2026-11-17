@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-15T18:55:31.000Z",
+  "updatedAt": "2026-11-17T16:37:36.000Z",
   "messagesLastMinute": 0,
   "bots": [
     {
@@ -101,15 +101,15 @@
       "id": "colin",
       "name": "COLIN",
       "role": "Software engineer",
-      "status": "idle",
+      "status": "done",
       "currentTask": "Standing by",
       "avatar": "",
-      "tasksCompletedToday": 0,
+      "tasksCompletedToday": 1,
       "openTasks": 0,
       "errorCount": 0,
       "alerts": [],
       "uptimeSince": "2026-11-15T16:20:00.000Z",
-      "stateSince": "2026-11-15T16:20:00.000Z",
+      "stateSince": "2026-11-17T16:37:36.000Z",
       "msgsToday": {
         "sent": 0,
         "received": 0
@@ -128,7 +128,13 @@
         0,
         0
       ],
-      "activity": []
+      "activity": [
+        {
+          "at": "2026-11-17T16:37:36.000Z",
+          "text": "Finished a task",
+          "status": "done"
+        }
+      ]
     },
     {
       "id": "alex",
@@ -400,33 +406,49 @@
   ],
   "handoffs": [],
   "usage": {
-    "weekUsedPct": 29.1,
-    "snapshotAt": "2026-11-15T18:05:17.000Z",
-    "resetsAt": "2026-11-15T19:52:00.000Z",
+    "weekUsedPct": 59.8,
+    "snapshotAt": "2026-11-17T16:37:36.000Z",
+    "resetsAt": "2026-11-22T19:52:00Z",
     "shares": [
       {
+        "id": "colin",
+        "pct": 47
+      },
+      {
         "id": "donna",
-        "pct": 78
+        "pct": 29
+      },
+      {
+        "id": "security",
+        "pct": 8
       },
       {
         "id": "alex",
-        "pct": 16
+        "pct": 5
       },
       {
         "id": "mailman",
         "pct": 4
       },
       {
+        "id": "milo",
+        "pct": 3
+      },
+      {
+        "id": "audrey",
+        "pct": 3
+      },
+      {
         "id": "legal",
-        "pct": 2
+        "pct": 1
       },
       {
         "id": "morgan",
-        "pct": "<1"
+        "pct": 0
       },
       {
-        "id": "other",
-        "pct": "<1"
+        "id": "research",
+        "pct": 0
       }
     ]
   }
